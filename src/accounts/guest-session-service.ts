@@ -9,9 +9,9 @@ export interface GuestSessionRequest {
 
 export interface PlayerProfile {
   playerId: string;
-  accountKind: "guest";
+  accountKind: "guest" | "apple" | "google";
   createdAt: string;
-  deletionState: "active";
+  deletionState: "active" | "requested" | "processing";
 }
 
 export interface SessionTokens {
@@ -45,6 +45,8 @@ export interface InstallationIdHasher {
 }
 
 export class GuestSessionValidationError extends Error {}
+
+export class GuestSessionIdempotencyConflictError extends Error {}
 
 export class GuestSessionService {
   public constructor(

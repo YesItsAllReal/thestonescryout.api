@@ -10,6 +10,10 @@ The owner approved the AWS serverless/DynamoDB architecture on 2026-08-31. See
 `docs/adr/0001-aws-serverless-dynamodb.md`. This decision does not authorize
 resource provisioning or deployment.
 
+Checkpoint progress and unresolved environment decisions are recorded in
+`docs/IMPLEMENTATION_STATUS.md`. Proposed DynamoDB access patterns and versioning
+rules are documented in `docs/dynamodb-data-model.md`.
+
 ## Local validation
 
 Requires Node.js 22 or newer:

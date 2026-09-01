@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Stones Cry Out API
-  version: 0.2.0
+  version: 0.7.0
   license:
     name: Proprietary
     identifier: LicenseRef-Proprietary
@@ -21,6 +21,9 @@ paths:
       responses:
         "200":
           description: Service is available.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
           content:
             application/json:
               schema:
@@ -63,7 +66,491 @@ paths:
           $ref: "#/components/responses/RateLimited"
         "500":
           $ref: "#/components/responses/ServerError"
+  /v1/auth/apple:
+    post:
+      operationId: signInWithApple
+      summary: Create or recover a session from a verified Apple identity
+      security: []
+      description: >-
+        Verifies the Apple identity token issuer, audience, signature, expiry,
+        subject, and caller-bound nonce before resolving an account. Apple
+        credentials are never accepted as identity without verification.
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppleCredentialRequest"
+      responses:
+        "200":
+          description: Apple account session created or safely recovered.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/IdempotencyConflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /v1/account/link:
+    post:
+      operationId: linkAccount
+      summary: Link a guest session to a verified Apple identity
+      description: >-
+        Requires a guest bearer session. If the Apple identity already owns
+        progress, the server returns an opaque conflict ticket and requires an
+        explicit save choice. Currency, verified rewards, entitlements, and
+        content unlocks are reconciled by server rules and are never blindly
+        added or discarded based on this save choice.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountLinkRequest"
+      responses:
+        "200":
+          description: Account linked and replacement session issued.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/AccountLinkDecisionRequired"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /v1/account:
+    get:
+      operationId: getAccount
+      summary: Return the authenticated player's account profile
+      description: >-
+        The player identifier is derived only from the verified bearer token;
+        callers cannot select another player's account as a request parameter.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: Authenticated account profile and current deletion status.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountProfile"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/ServerError"
+    delete:
+      operationId: requestAccountDeletion
+      summary: Request asynchronous deletion of the authenticated account
+      description: >-
+        Durably records and audits the deletion request before revoking sessions.
+        Provider reauthentication may be required by server policy. Profile and
+        personal data are deleted or anonymized asynchronously; only minimized
+        records required for purchase, accounting, fraud, or legal obligations
+        may be retained.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountDeletionRequest"
+      responses:
+        "202":
+          description: Deletion was durably requested or an identical request was replayed.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountDeletionReceipt"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/IdempotencyConflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /v1/save:
+    get:
+      operationId: getSave
+      summary: Return an authenticated player's save slot
+      description: >-
+        The player identifier comes only from the verified bearer token. The
+        returned revision is the value required by the next conditional write.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - $ref: "#/components/parameters/SaveSlot"
+      responses:
+        "200":
+          description: Current authoritative save slot.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GameSave"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/ServerError"
+    put:
+      operationId: putSave
+      summary: Conditionally replace an authenticated player's save slot
+      description: >-
+        Writes only when expectedRevision equals the current server revision;
+        zero creates a missing slot. A stale write returns current server
+        metadata and never silently overwrites either snapshot. Replaying the
+        same idempotency key and payload returns the original result.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveWriteRequest"
+      responses:
+        "200":
+          description: Save was conditionally written or an identical result replayed.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GameSave"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/SaveWriteConflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /v1/economy:
+    get:
+      operationId: getEconomy
+      summary: Return the authenticated player's authoritative spendable balances
+      description: >-
+        Balances are server-authoritative. Purchased gems do not expire, and
+        clients must not calculate trusted balances from local callbacks.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: Current authoritative balances.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EconomyBalance"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /v1/spend:
+    post:
+      operationId: spendEconomy
+      summary: Apply a recognized server-priced economy action
+      description: >-
+        The client selects a recognized action/reference but never supplies a
+        currency resource, cost, delta, or resulting balance. Server rules resolve
+        the complete atomic mutation, and no resulting balance may be negative.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EconomySpendRequest"
+      responses:
+        "200":
+          description: Recognized spend applied once or safely replayed.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EconomyMutationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/EconomyConflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /v1/rewards/claim:
+    post:
+      operationId: claimReward
+      summary: Verify and apply a recognized reward claim once
+      description: >-
+        The client supplies only a claim type/reference and optional opaque proof.
+        It cannot select a currency, amount, reason code, or resulting balance.
+        Unverified or duplicate claims cannot grant twice.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RewardClaimRequest"
+      responses:
+        "200":
+          description: Verified reward applied once or safely replayed.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EconomyMutationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/IdempotencyConflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /v1/entitlements:
+    get:
+      operationId: getEntitlements
+      summary: Return the authenticated player's server-verified entitlements
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          description: Current entitlement states, including revocations and refunds.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntitlementsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /v1/purchases/verify:
+    post:
+      operationId: verifyPurchase
+      summary: Verify and durably process an App Store transaction
+      description: >-
+        Verifies Apple-signed transaction data and its environment, bundle,
+        product, and app-account-token binding before atomically recording the
+        globally unique transaction, ledger grant, and entitlement. A StoreKit
+        client callback alone never grants value.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PurchaseVerificationRequest"
+      responses:
+        "200":
+          description: Transaction granted once or returned as an existing duplicate.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommerceGrantResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/IdempotencyConflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /v1/app-store/notifications:
+    post:
+      operationId: processAppStoreNotification
+      summary: Process a signed App Store Server Notification V2 payload
+      description: >-
+        This provider callback has no bearer session. The signed payload must be
+        verified before use. Notification IDs are globally idempotent, and valid
+        refund/revocation events update transaction and entitlement state.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppStoreNotificationRequest"
+      responses:
+        "200":
+          description: Verified notification applied, duplicated, or safely ignored.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppStoreNotificationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /v1/ads/reward/verify:
+    post:
+      operationId: verifyAdReward
+      summary: Verify and grant a completed rewarded-ad event once
+      description: >-
+        Verifies provider completion, player binding, and the preissued claim ID.
+        The server reward catalog determines the amount. Provider event IDs are
+        globally unique and cannot grant across players or idempotency keys twice.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdRewardVerificationRequest"
+      responses:
+        "200":
+          description: Verified ad reward granted once or returned as a duplicate.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommerceGrantResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/IdempotencyConflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/ServerError"
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >-
+        Environment-specific server-issued access token. Issuer and audience
+        values are deployment configuration and are not embedded in this contract.
   parameters:
     RequestId:
       name: X-Request-ID
@@ -81,6 +568,16 @@ components:
         minLength: 8
         maxLength: 128
         pattern: "^[A-Za-z0-9._-]+$"
+    SaveSlot:
+      name: slot
+      in: query
+      required: false
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 32
+        pattern: "^[A-Za-z0-9_-]+$"
+        default: primary
   headers:
     RequestId:
       description: Correlation identifier safe to include in support logs.
@@ -90,19 +587,91 @@ components:
   responses:
     BadRequest:
       description: Request validation failed.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
       content:
         application/problem+json:
           schema:
             $ref: "#/components/schemas/Problem"
     IdempotencyConflict:
       description: The idempotency key was reused for a different request.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
       content:
         application/problem+json:
           schema:
             $ref: "#/components/schemas/Problem"
+    Unauthorized:
+      description: A valid bearer session or verified provider assertion is required.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Forbidden:
+      description: The authenticated player cannot perform this operation.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    NotFound:
+      description: The authenticated resource does not exist or is no longer available.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    AccountLinkDecisionRequired:
+      description: Existing progress requires an explicit player save choice.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/problem+json:
+          schema:
+            oneOf:
+              - $ref: "#/components/schemas/AccountLinkConflict"
+              - $ref: "#/components/schemas/Problem"
+    SaveWriteConflict:
+      description: >-
+        The expected revision is stale, or the idempotency key was reused with
+        different input. Fetch the current slot before making an explicit choice.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/problem+json:
+          schema:
+            oneOf:
+              - $ref: "#/components/schemas/SaveRevisionConflict"
+              - $ref: "#/components/schemas/Problem"
+    EconomyConflict:
+      description: >-
+        The expected balance revision is stale, funds are insufficient, or the
+        idempotency key was reused with different input. No partial mutation occurs.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/problem+json:
+          schema:
+            oneOf:
+              - $ref: "#/components/schemas/EconomyRevisionConflict"
+              - $ref: "#/components/schemas/Problem"
     RateLimited:
       description: Request rate exceeded.
       headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
         Retry-After:
           schema:
             type: integer
@@ -113,6 +682,9 @@ components:
             $ref: "#/components/schemas/Problem"
     ServerError:
       description: Non-sensitive server failure.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
       content:
         application/problem+json:
           schema:
@@ -146,6 +718,421 @@ components:
         platform:
           type: string
           enum: [ios, android]
+    AppleCredentialRequest:
+      type: object
+      additionalProperties: false
+      required: [identityToken, nonce]
+      properties:
+        identityToken:
+          type: string
+          minLength: 20
+          maxLength: 16384
+          writeOnly: true
+          description: Apple identity token; verified server-side before use.
+        authorizationCode:
+          type: string
+          minLength: 8
+          maxLength: 4096
+          writeOnly: true
+          description: Optional short-lived code for supported provider lifecycle operations.
+        nonce:
+          type: string
+          minLength: 16
+          maxLength: 256
+          pattern: "^[A-Za-z0-9._~-]+$"
+          writeOnly: true
+          description: Caller-generated nonce bound to the verified Apple assertion.
+    AccountLinkRequest:
+      type: object
+      additionalProperties: false
+      required: [provider, credential]
+      properties:
+        provider:
+          type: string
+          enum: [apple]
+        credential:
+          $ref: "#/components/schemas/AppleCredentialRequest"
+        resolution:
+          $ref: "#/components/schemas/AccountLinkResolution"
+    AccountLinkResolution:
+      type: object
+      additionalProperties: false
+      required: [conflictId, saveChoice]
+      properties:
+        conflictId:
+          type: string
+          format: uuid
+          description: Opaque, short-lived ticket from the decision-required response.
+        saveChoice:
+          type: string
+          enum: [preferGuestSave, preferExistingSave]
+          description: >-
+            Selects ordinary save progress only. Authoritative economy and
+            entitlements are always reconciled independently.
+    AccountProfile:
+      type: object
+      additionalProperties: false
+      required:
+        [playerId, accountKind, displayName, locale, createdAt, linkedProviders, deletionState]
+      properties:
+        playerId:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Immutable, server-issued player identifier.
+        accountKind:
+          type: string
+          enum: [guest, apple, google]
+        displayName:
+          type: [string, "null"]
+          maxLength: 50
+        locale:
+          type: string
+          minLength: 2
+          maxLength: 35
+          pattern: "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        linkedProviders:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum: [apple, google]
+        deletionState:
+          type: string
+          enum: [active, requested, processing]
+    AccountDeletionRequest:
+      type: object
+      additionalProperties: false
+      required: [confirmation]
+      properties:
+        confirmation:
+          type: string
+          enum: [deleteAccount]
+          description: Explicit confirmation separate from the destructive UI action.
+        reauthentication:
+          $ref: "#/components/schemas/AccountReauthentication"
+    AccountReauthentication:
+      type: object
+      additionalProperties: false
+      required: [provider, credential]
+      properties:
+        provider:
+          type: string
+          enum: [apple]
+        credential:
+          $ref: "#/components/schemas/AppleCredentialRequest"
+    AccountDeletionReceipt:
+      type: object
+      additionalProperties: false
+      required: [deletionState, requestedAt]
+      properties:
+        deletionState:
+          type: string
+          enum: [requested, processing]
+        requestedAt:
+          type: string
+          format: date-time
+          readOnly: true
+    GameSave:
+      type: object
+      additionalProperties: false
+      required: [slot, revision, schemaVersion, snapshot, updatedAt]
+      properties:
+        slot:
+          type: string
+          minLength: 1
+          maxLength: 32
+          pattern: "^[A-Za-z0-9_-]+$"
+        revision:
+          type: integer
+          minimum: 1
+          readOnly: true
+        schemaVersion:
+          type: integer
+          minimum: 1
+          maximum: 10000
+        snapshot:
+          type: object
+          description: Versioned, portable game snapshot; never executable content.
+          additionalProperties: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+    SaveWriteRequest:
+      type: object
+      additionalProperties: false
+      required: [slot, expectedRevision, schemaVersion, snapshot, deviceId]
+      properties:
+        slot:
+          type: string
+          minLength: 1
+          maxLength: 32
+          pattern: "^[A-Za-z0-9_-]+$"
+        expectedRevision:
+          type: integer
+          minimum: 0
+        schemaVersion:
+          type: integer
+          minimum: 1
+          maximum: 10000
+        snapshot:
+          type: object
+          description: Versioned, portable game snapshot; never executable content.
+          additionalProperties: true
+        deviceId:
+          type: string
+          format: uuid
+          writeOnly: true
+          description: >-
+            Random app-scoped device installation identifier, never a hardware
+            identifier. The server retains only a one-way hash.
+    EconomyBalance:
+      type: object
+      additionalProperties: false
+      required: [coins, gems, energy, energyUpdatedAt, revision]
+      properties:
+        coins:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        gems:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+          description: Purchased gems never expire.
+        energy:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        energyUpdatedAt:
+          type: string
+          format: date-time
+        revision:
+          type: integer
+          minimum: 1
+    EconomySpendRequest:
+      type: object
+      additionalProperties: false
+      required: [action, referenceId, expectedRevision, clientBuild, contentVersion]
+      properties:
+        action:
+          type: string
+          enum: [inventoryExpansion, storeOffer, energyRefill, cooldownSkip]
+        referenceId:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: "^[A-Za-z0-9._:-]+$"
+          description: Identifier resolved against server-controlled rules/configuration.
+        expectedRevision:
+          type: integer
+          minimum: 1
+        clientBuild:
+          type: integer
+          minimum: 1
+        contentVersion:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: "^[A-Za-z0-9._-]+$"
+    RewardClaimRequest:
+      type: object
+      additionalProperties: false
+      required: [claimType, claimId, clientBuild, contentVersion]
+      properties:
+        claimType:
+          type: string
+          enum: [order, spotlight, dailyGift, quiz, ad, event]
+        claimId:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: "^[A-Za-z0-9._:-]+$"
+        claimToken:
+          type: string
+          minLength: 8
+          maxLength: 16384
+          writeOnly: true
+          description: Optional opaque server/provider proof; never logged or returned.
+        clientBuild:
+          type: integer
+          minimum: 1
+        contentVersion:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: "^[A-Za-z0-9._-]+$"
+    EconomyMutationResponse:
+      type: object
+      additionalProperties: false
+      required: [balance, ledgerEntries]
+      properties:
+        balance:
+          $ref: "#/components/schemas/EconomyBalance"
+        ledgerEntries:
+          type: array
+          minItems: 1
+          maxItems: 3
+          items:
+            $ref: "#/components/schemas/LedgerEntry"
+    LedgerEntry:
+      type: object
+      additionalProperties: false
+      required:
+        [ledgerEntryId, resource, delta, reasonCode, sourceReference, balanceAfter, createdAt]
+      properties:
+        ledgerEntryId:
+          type: string
+          format: uuid
+        resource:
+          type: string
+          enum: [coins, gems, energy]
+        delta:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+          not:
+            const: 0
+        reasonCode:
+          type: string
+          enum:
+            [ORDER_REWARD, SPOTLIGHT_REWARD, DAILY_GIFT, QUIZ_REWARD, AD_REWARD,
+             IAP_GRANT, ENERGY_REGEN, STORE_SPEND, INVENTORY_EXPANSION, EVENT_REWARD]
+        sourceReference:
+          type: string
+          minLength: 1
+          maxLength: 128
+        balanceAfter:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        createdAt:
+          type: string
+          format: date-time
+    EntitlementsResponse:
+      type: object
+      additionalProperties: false
+      required: [entitlements]
+      properties:
+        entitlements:
+          type: array
+          items:
+            $ref: "#/components/schemas/Entitlement"
+    Entitlement:
+      type: object
+      additionalProperties: false
+      required: [productId, state, purchasedAt, environment]
+      properties:
+        productId:
+          type: string
+          minLength: 1
+          maxLength: 255
+        state:
+          type: string
+          enum: [active, revoked, refunded]
+        purchasedAt:
+          type: string
+          format: date-time
+        environment:
+          type: string
+          enum: [sandbox, production]
+    PurchaseVerificationRequest:
+      type: object
+      additionalProperties: false
+      required: [signedTransaction, clientBuild, contentVersion]
+      properties:
+        signedTransaction:
+          type: string
+          minLength: 20
+          maxLength: 32768
+          writeOnly: true
+          description: Apple-signed transaction JWS; never logged or returned.
+        clientBuild:
+          type: integer
+          minimum: 1
+        contentVersion:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: "^[A-Za-z0-9._-]+$"
+    CommerceGrantResponse:
+      type: object
+      additionalProperties: false
+      required: [status, balance, ledgerEntries]
+      properties:
+        status:
+          type: string
+          enum: [granted, duplicate]
+        balance:
+          $ref: "#/components/schemas/EconomyBalance"
+        ledgerEntries:
+          type: array
+          maxItems: 3
+          items:
+            $ref: "#/components/schemas/LedgerEntry"
+        entitlement:
+          $ref: "#/components/schemas/Entitlement"
+    AppStoreNotificationRequest:
+      type: object
+      additionalProperties: false
+      required: [signedPayload]
+      properties:
+        signedPayload:
+          type: string
+          minLength: 20
+          maxLength: 32768
+          writeOnly: true
+          description: Apple-signed App Store Server Notification V2 payload.
+    AppStoreNotificationResponse:
+      type: object
+      additionalProperties: false
+      required: [status, transactionState]
+      properties:
+        status:
+          type: string
+          enum: [applied, duplicate, ignored]
+        transactionState:
+          type: string
+          enum: [refunded, revoked]
+        entitlement:
+          $ref: "#/components/schemas/Entitlement"
+    AdRewardVerificationRequest:
+      type: object
+      additionalProperties: false
+      required:
+        [placement, rewardChoice, claimId, verificationPayload, clientBuild, contentVersion]
+      properties:
+        placement:
+          type: string
+          enum: [storeEnergy, storeCoins, energyEmpty]
+        rewardChoice:
+          type: string
+          enum: [energy20, coins100]
+          description: Server configuration, not this label, determines the actual grant.
+        claimId:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: "^[A-Za-z0-9._:-]+$"
+        verificationPayload:
+          type: string
+          minLength: 20
+          maxLength: 32768
+          writeOnly: true
+          description: Opaque provider verification payload; never logged or returned.
+        clientBuild:
+          type: integer
+          minimum: 1
+        contentVersion:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: "^[A-Za-z0-9._-]+$"
     SessionResponse:
       type: object
       additionalProperties: false
@@ -210,3 +1197,83 @@ components:
         requestId:
           type: string
           format: uuid
+    AccountLinkConflict:
+      type: object
+      additionalProperties: false
+      required: [type, title, status, requestId, conflictId, allowedSaveChoices]
+      properties:
+        type:
+          type: string
+          format: uri-reference
+        title:
+          type: string
+        status:
+          type: integer
+          enum: [409]
+        detail:
+          type: string
+        requestId:
+          type: string
+          format: uuid
+        conflictId:
+          type: string
+          format: uuid
+        allowedSaveChoices:
+          type: array
+          minItems: 2
+          maxItems: 2
+          uniqueItems: true
+          items:
+            type: string
+            enum: [preferGuestSave, preferExistingSave]
+    SaveRevisionConflict:
+      type: object
+      additionalProperties: false
+      required: [type, title, status, requestId, slot, currentRevision]
+      properties:
+        type:
+          type: string
+          format: uri-reference
+        title:
+          type: string
+        status:
+          type: integer
+          enum: [409]
+        detail:
+          type: string
+        requestId:
+          type: string
+          format: uuid
+        slot:
+          type: string
+        currentRevision:
+          type: integer
+          minimum: 0
+        currentSchemaVersion:
+          type: integer
+          minimum: 1
+          maximum: 10000
+        currentUpdatedAt:
+          type: string
+          format: date-time
+    EconomyRevisionConflict:
+      type: object
+      additionalProperties: false
+      required: [type, title, status, requestId, currentRevision]
+      properties:
+        type:
+          type: string
+          format: uri-reference
+        title:
+          type: string
+        status:
+          type: integer
+          enum: [409]
+        detail:
+          type: string
+        requestId:
+          type: string
+          format: uuid
+        currentRevision:
+          type: integer
+          minimum: 1
