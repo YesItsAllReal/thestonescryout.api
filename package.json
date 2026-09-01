@@ -1,0 +1,20 @@
+{
+  "name": "@stones-cry-out/product-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "contract:lint": "redocly lint openapi/product-api.yaml",
+    "test": "npm run build && node --test dist/tests/**/*.test.js",
+    "check": "npm run contract:lint && npm test"
+  },
+  "devDependencies": {
+    "@redocly/cli": "^2.49.0",
+    "@types/node": "^22.15.0",
+    "typescript": "^5.9.0"
+  }
+}

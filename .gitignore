@@ -1,0 +1,13 @@
+node_modules/
+bin/
+obj/
+dist/
+coverage/
+*.log
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.p12
