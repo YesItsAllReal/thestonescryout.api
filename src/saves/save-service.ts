@@ -109,7 +109,8 @@ function validateWrite(request: SaveWriteRequest, idempotencyKey: string): void 
     throw new SaveValidationError("snapshot must be a JSON object");
   }
   validateJson(request.snapshot, 0);
-  if (Buffer.byteLength(JSON.stringify(request.snapshot), "utf8") > 1_048_576) {
+  // Leaves room below DynamoDB's 400 KiB item limit for keys and metadata.
+  if (Buffer.byteLength(JSON.stringify(request.snapshot), "utf8") > 307_200) {
     throw new SaveValidationError("snapshot exceeds the local API size limit");
   }
 }

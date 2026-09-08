@@ -1,13 +1,14 @@
 # DynamoDB data model and evolution
 
-Status: design approved by ADR 0001; no table or AWS resource has been created.
+Status: design approved by ADR 0001. A development table has been provisioned;
+repository adapters are implemented and validated locally before deployment.
 
 ## Table boundary
 
 Checkpoint 6 uses one logical player-data table per environment. The physical
-table name, AWS account, and Region are deployment inputs and are intentionally
-undecided. Content binaries remain outside this table behind the content
-repository boundary.
+table name, AWS account, and Region remain environment-supplied deployment
+inputs. Content binaries remain outside this table behind the content repository
+boundary.
 
 Every item has `pk`, `sk`, `entityType`, and `recordVersion`. Timestamps are UTC
 RFC 3339 strings. Opaque UUIDs are immutable; email addresses, raw installation
@@ -19,7 +20,7 @@ identifiers, provider tokens, and Apple credentials are never keys.
 | --- | --- | --- | --- |
 | Player | `PLAYER#<playerId>` | `PROFILE` | Load/update an authorized profile |
 | Installation mapping | `INSTALLATION#<sha256>` | `PLAYER` | Recover the same guest without retaining the raw installation ID |
-| Provider mapping | `PROVIDER#<issuer>#<subjectHash>` | `PLAYER` | Resolve a verified federated subject to one player |
+| Provider mapping | `PROVIDER#<issuerHash>#<subjectHash>` | `PLAYER` | Resolve a verified federated subject to one player |
 | Save | `PLAYER#<playerId>` | `SAVE#<slot>` | Load or conditionally replace a save by revision |
 | Balance | `PLAYER#<playerId>` | `BALANCE` | Load authoritative balances |
 | Ledger entry | `PLAYER#<playerId>` | `LEDGER#<createdAt>#<entryId>` | Page a player's immutable economy history |
@@ -30,17 +31,19 @@ identifiers, provider tokens, and Apple credentials are never keys.
 | Idempotency record | `IDEMPOTENCY#<scope>#<keyHash>` | `RESULT` | Replay the original result or reject a changed payload |
 | Audit event | `PLAYER#<playerId>` | `AUDIT#<createdAt>#<eventId>` | Page security/account/economy audit history |
 | Deletion job | `DELETION#<playerId>` | `REQUEST` | Resume asynchronous deletion safely |
+| Link conflict | `LINK_CONFLICT#<conflictId>` | `REQUEST` | Resolve an opaque, expiring account-link decision |
 | Catalog | `CONTENT#<channel>` | `CATALOG#<version>` | Load a compatible signed catalog descriptor |
 | Configuration | `CONFIG#<environment>` | `VERSION#<version>` | Load a bounded, signed configuration descriptor |
 
-Provider subjects are first scoped by the verified issuer and then hashed for
-key privacy. The verified issuer and subject remain available only where needed
-for provider lifecycle operations, protected as sensitive attributes.
+Provider issuers and subjects are normalized/validated and independently hashed
+before becoming key components. Raw subjects and issuer URLs do not appear in
+table keys. Any lifecycle data must use separately protected attributes.
 
 ## Conditional writes and transactions
 
 - Guest creation transactionally writes Player, Installation mapping, and
-  Idempotency record. Installation mapping uses `attribute_not_exists(pk)`;
+  an authoritative revision-one Balance from injected server configuration,
+  and the Idempotency record. Installation mapping uses `attribute_not_exists(pk)`;
   contention reads and returns the winning player.
 - An idempotency record stores operation, player scope, request hash, response
   reference, status, and expiry. The same key plus the same request replays the
@@ -48,6 +51,10 @@ for provider lifecycle operations, protected as sensitive attributes.
 - Save replacement requires `revision = expectedRevision`, then increments it
   exactly once. A mismatch returns the current revision and an explicit conflict;
   it never silently selects a snapshot.
+- Save snapshots are limited to 300 KiB of serialized JSON, leaving headroom
+  below DynamoDB's 400 KiB item limit for keys, version fields, and metadata.
+  Completed idempotency records retain the original public result so a later
+  replay cannot accidentally return a newer save revision.
 - Economy mutations use one transaction containing the idempotency record,
   balance condition/update, immutable ledger entry, and any entitlement/reward
   state. A spend condition requires the resulting balance to be nonnegative.
@@ -61,9 +68,18 @@ for provider lifecycle operations, protected as sensitive attributes.
 - Provider linking transactionally claims the provider mapping, updates the
   player, and appends an audit event. Existing progress is never silently
   overwritten; a separate merge decision is required.
+- Initial provider linking and resolution of an existing-account conflict are
+  separate repository operations. A conflict-resolution adapter is not allowed
+  to implement a save choice by merely repointing the provider mapping; it must
+  atomically reconcile the selected save, authoritative economy, entitlements,
+  content unlocks, provider ownership, conflict state, and audit result.
 - Account deletion uses a state transition condition (`active` to `requested`)
   and an idempotent job record. Retained purchase records are minimized and
   separated from deleted profile data.
+- The deletion transaction also appends one immutable audit event and stores the
+  original receipt. Requests made after deletion is already requested reuse the
+  durable job timestamp and do not append another audit event, even under a new
+  idempotency key.
 
 ## Secondary indexes
 
@@ -91,9 +107,10 @@ scans. New indexes require a documented access pattern before deployment.
 - Environment data never moves implicitly between local, development, TestFlight
   staging, and production.
 
-## Undecided deployment identifiers
+## Deployment identifier policy
 
-Before infrastructure creation, surface for owner approval: AWS accounts and
-Regions per environment, physical table and index names, Cognito user-pool/client
+Development identifiers are recorded in `IMPLEMENTATION_STATUS.md`. Before any
+new environment or infrastructure change, surface for owner approval: AWS
+accounts and Regions, physical table and index names, Cognito user-pool/client
 IDs, token issuers/audiences, content bucket and CloudFront distribution names,
 public API/CDN URLs, retention periods, and KMS/key-management choices.

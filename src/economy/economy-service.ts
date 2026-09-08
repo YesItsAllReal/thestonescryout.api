@@ -11,7 +11,8 @@ export type EconomyReason =
   | "ENERGY_REGEN"
   | "STORE_SPEND"
   | "INVENTORY_EXPANSION"
-  | "EVENT_REWARD";
+  | "EVENT_REWARD"
+  | "OFFLINE_SYNC_RECONCILIATION";
 
 export interface EconomyBalance {
   readonly coins: number;

@@ -2,8 +2,15 @@ node_modules/
 bin/
 obj/
 dist/
+dist-lambda/
 coverage/
 *.log
+lambda.zip
+# Rollback artifacts and smoke test fixtures -- never commit these
+rollback/
+rollback-*.json
+rollback-*.zip
+smoke-fixture-*.json
 .env
 .env.*
 !.env.example

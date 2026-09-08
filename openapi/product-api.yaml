@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Stones Cry Out API
-  version: 0.7.0
+  version: 0.9.0
   license:
     name: Proprietary
     identifier: LicenseRef-Proprietary
@@ -62,6 +62,75 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "409":
           $ref: "#/components/responses/IdempotencyConflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /v1/session/refresh:
+    post:
+      operationId: refreshSession
+      summary: Rotate a valid refresh credential and issue replacement tokens
+      security: []
+      description: >-
+        Validates the refresh credential through the configured identity
+        provider and rotates it. Reuse of an invalidated rotating credential is
+        rejected and may revoke its token family. Credentials are never logged.
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionRefreshRequest"
+      responses:
+        "200":
+          description: Replacement access and refresh tokens.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionTokens"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /v1/session/revoke:
+    post:
+      operationId: revokeSession
+      summary: Revoke the authenticated session's refresh credential
+      security:
+        - bearerAuth: []
+      description: >-
+        Revokes the supplied refresh credential only after binding it to the
+        player derived from the verified access token. The operation is safe to
+        repeat and never logs either credential.
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionRevokeRequest"
+      responses:
+        "204":
+          description: Session credential was revoked or was already inactive.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "429":
           $ref: "#/components/responses/RateLimited"
         "500":
@@ -214,6 +283,44 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/IdempotencyConflict"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /v1/sync/commands:
+    post:
+      operationId: syncOfflineCommands
+      summary: Validate and apply a bounded offline command chain
+      security:
+        - bearerAuth: []
+      description: >-
+        Deterministically validates up to 500 hash-chained offline commands from
+        the authenticated player. The server determines all economic grants.
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OfflineCommandBatch"
+      responses:
+        "200":
+          description: Complete command batch accepted or safely replayed.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OfflineSyncReceipt"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "409":
           $ref: "#/components/responses/IdempotencyConflict"
         "429":
@@ -542,6 +649,67 @@ paths:
           $ref: "#/components/responses/RateLimited"
         "500":
           $ref: "#/components/responses/ServerError"
+  /v1/content/catalog:
+    get:
+      operationId: getContentCatalog
+      summary: Return a signed catalog of non-executable content packs
+      description: >-
+        Returns a detached-signature catalog selected for client compatibility.
+        Clients still verify catalog and pack signatures/checksums before atomic
+        activation and retain the bundled starter pack and last known good pack.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - $ref: "#/components/parameters/ClientPlatform"
+        - $ref: "#/components/parameters/AppBuild"
+        - $ref: "#/components/parameters/ClientLocale"
+        - $ref: "#/components/parameters/ContentChannel"
+      responses:
+        "200":
+          description: Signed compatible content catalog.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignedContentCatalog"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /v1/config:
+    get:
+      operationId: getRemoteConfiguration
+      summary: Return signed feature, economy, content, and public-link configuration
+      description: >-
+        Values are validated against compiled server/client-safe bounds. Remote
+        configuration cannot execute code, reduce purchased balances, change an
+        App Store product, introduce an SDK, or bypass verification requirements.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+        - $ref: "#/components/parameters/ClientPlatform"
+        - $ref: "#/components/parameters/AppBuild"
+        - $ref: "#/components/parameters/ClientLocale"
+      responses:
+        "200":
+          description: Signed bounded configuration.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignedRemoteConfiguration"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 components:
   securitySchemes:
     bearerAuth:
@@ -578,6 +746,36 @@ components:
         maxLength: 32
         pattern: "^[A-Za-z0-9_-]+$"
         default: primary
+    ClientPlatform:
+      name: platform
+      in: query
+      required: true
+      schema:
+        type: string
+        enum: [ios, android]
+    AppBuild:
+      name: appBuild
+      in: query
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    ClientLocale:
+      name: locale
+      in: query
+      required: true
+      schema:
+        type: string
+        minLength: 2
+        maxLength: 35
+        pattern: "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+    ContentChannel:
+      name: channel
+      in: query
+      required: true
+      schema:
+        type: string
+        enum: [development, staging, production]
   headers:
     RequestId:
       description: Correlation identifier safe to include in support logs.
@@ -689,6 +887,15 @@ components:
         application/problem+json:
           schema:
             $ref: "#/components/schemas/Problem"
+    ServiceUnavailable:
+      description: A valid signed catalog/configuration is temporarily unavailable.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
   schemas:
     HealthResponse:
       type: object
@@ -741,7 +948,10 @@ components:
           maxLength: 256
           pattern: "^[A-Za-z0-9._~-]+$"
           writeOnly: true
-          description: Caller-generated nonce bound to the verified Apple assertion.
+          description: >-
+            Raw caller-generated nonce. The Apple authorization request carries
+            its lowercase SHA-256 value, which must match the verified token's
+            nonce claim.
     AccountLinkRequest:
       type: object
       additionalProperties: false
@@ -1002,7 +1212,8 @@ components:
           type: string
           enum:
             [ORDER_REWARD, SPOTLIGHT_REWARD, DAILY_GIFT, QUIZ_REWARD, AD_REWARD,
-             IAP_GRANT, ENERGY_REGEN, STORE_SPEND, INVENTORY_EXPANSION, EVENT_REWARD]
+             IAP_GRANT, ENERGY_REGEN, STORE_SPEND, INVENTORY_EXPANSION, EVENT_REWARD,
+             OFFLINE_SYNC_RECONCILIATION]
         sourceReference:
           type: string
           minLength: 1
@@ -1133,6 +1344,222 @@ components:
           minLength: 1
           maxLength: 64
           pattern: "^[A-Za-z0-9._-]+$"
+    SignedContentCatalog:
+      type: object
+      additionalProperties: false
+      required:
+        [catalogVersion, channel, publishedAt, packs, keyId, signatureAlgorithm, signature]
+      properties:
+        catalogVersion:
+          $ref: "#/components/schemas/VersionIdentifier"
+        channel:
+          type: string
+          enum: [development, staging, production]
+        publishedAt:
+          type: string
+          format: date-time
+        packs:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          items:
+            $ref: "#/components/schemas/ContentPackDescriptor"
+        keyId:
+          $ref: "#/components/schemas/SigningKeyId"
+        signatureAlgorithm:
+          type: string
+          enum: [ed25519]
+        signature:
+          type: string
+          minLength: 40
+          maxLength: 512
+          description: Detached signature over the canonical catalog without this field.
+    ContentPackDescriptor:
+      type: object
+      additionalProperties: false
+      required:
+        [packId, version, minimumAppBuild, locale, type, displayName,
+         compressedSize, uncompressedSize, sha256, downloadUrl, publishedAt, editorialStatus]
+      properties:
+        packId:
+          $ref: "#/components/schemas/VersionIdentifier"
+        version:
+          $ref: "#/components/schemas/VersionIdentifier"
+        minimumAppBuild:
+          type: integer
+          minimum: 1
+        maximumAppBuild:
+          type: integer
+          minimum: 1
+        locale:
+          type: string
+          minLength: 2
+          maxLength: 35
+        type:
+          type: string
+          enum: [starter, campaign, character, archive, art, event, localization, balance]
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        compressedSize:
+          type: integer
+          minimum: 1
+          maximum: 1073741824
+        uncompressedSize:
+          type: integer
+          minimum: 1
+          maximum: 1073741824
+        sha256:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+        downloadUrl:
+          type: string
+          format: uri
+          pattern: "^https://"
+          description: Approved CDN URL supplied only after environment approval.
+        publishedAt:
+          type: string
+          format: date-time
+        editorialStatus:
+          type: string
+          enum: [approved]
+    SignedRemoteConfiguration:
+      type: object
+      additionalProperties: false
+      required:
+        [configVersion, minimumAppBuild, activeCatalogVersion, featureFlags,
+         economy, maintenanceMessage, links, publishedAt, keyId,
+         signatureAlgorithm, signature]
+      properties:
+        configVersion:
+          $ref: "#/components/schemas/VersionIdentifier"
+        minimumAppBuild:
+          type: integer
+          minimum: 1
+        activeCatalogVersion:
+          $ref: "#/components/schemas/VersionIdentifier"
+        featureFlags:
+          $ref: "#/components/schemas/FeatureFlags"
+        economy:
+          $ref: "#/components/schemas/RemoteEconomyConfiguration"
+        maintenanceMessage:
+          type: [string, "null"]
+          maxLength: 500
+        links:
+          $ref: "#/components/schemas/PublicLinks"
+        publishedAt:
+          type: string
+          format: date-time
+        keyId:
+          $ref: "#/components/schemas/SigningKeyId"
+        signatureAlgorithm:
+          type: string
+          enum: [ed25519]
+        signature:
+          type: string
+          minLength: 40
+          maxLength: 512
+          description: Detached signature over canonical configuration without this field.
+    FeatureFlags:
+      type: object
+      additionalProperties: false
+      required:
+        [googleSignIn, rewardedAds, weekendDig, quizzes, gameCenter,
+         remoteContent, purchases, accountSync, ministryLinks]
+      properties:
+        googleSignIn: { type: boolean }
+        rewardedAds: { type: boolean }
+        weekendDig: { type: boolean }
+        quizzes: { type: boolean }
+        gameCenter: { type: boolean }
+        remoteContent: { type: boolean }
+        purchases: { type: boolean }
+        accountSync: { type: boolean }
+        ministryLinks: { type: boolean }
+    RemoteEconomyConfiguration:
+      type: object
+      additionalProperties: false
+      required:
+        [startingCoins, startingGems, startingEnergy, energyCap,
+         energyRegenerationSeconds, dailyGiftCoins, dailyGiftEnergy,
+         rewardedCoins, rewardedEnergy, rewardedDailyCap]
+      properties:
+        startingCoins: { type: integer, minimum: 0, maximum: 10000 }
+        startingGems: { type: integer, minimum: 0, maximum: 1000 }
+        startingEnergy: { type: integer, minimum: 0, maximum: 500 }
+        energyCap: { type: integer, minimum: 1, maximum: 500 }
+        energyRegenerationSeconds: { type: integer, minimum: 30, maximum: 3600 }
+        dailyGiftCoins: { type: integer, minimum: 0, maximum: 1000 }
+        dailyGiftEnergy: { type: integer, minimum: 0, maximum: 200 }
+        rewardedCoins: { type: integer, minimum: 0, maximum: 1000 }
+        rewardedEnergy: { type: integer, minimum: 0, maximum: 200 }
+        rewardedDailyCap: { type: integer, minimum: 0, maximum: 20 }
+    PublicLinks:
+      type: object
+      additionalProperties: false
+      required: [privacyUrl, termsUrl, supportUrl]
+      properties:
+        privacyUrl:
+          type: string
+          format: uri
+          pattern: "^https://"
+        termsUrl:
+          type: string
+          format: uri
+          pattern: "^https://"
+        supportUrl:
+          type: string
+          format: uri
+          pattern: "^https://"
+    VersionIdentifier:
+      type: string
+      minLength: 1
+      maxLength: 64
+      pattern: "^[A-Za-z0-9._-]+$"
+    SigningKeyId:
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: "^[A-Za-z0-9._-]+$"
+    OfflineCommandBatch:
+      type: object
+      additionalProperties: false
+      required: [expectedCheckpointRevision, baseHash, clientBuild, contentVersion, commands]
+      properties:
+        expectedCheckpointRevision: { type: integer, minimum: 0 }
+        baseHash: { type: string, pattern: "^[a-f0-9]{64}$" }
+        clientBuild: { type: integer, minimum: 1 }
+        contentVersion: { $ref: "#/components/schemas/VersionIdentifier" }
+        commands:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items: { $ref: "#/components/schemas/OfflineCommand" }
+    OfflineCommand:
+      type: object
+      additionalProperties: false
+      required: [commandId, sequence, previousHash, commandHash, type, payload]
+      properties:
+        commandId: { type: string, format: uuid }
+        sequence: { type: integer, minimum: 1, maximum: 500 }
+        previousHash: { type: string, pattern: "^[a-f0-9]{64}$" }
+        commandHash: { type: string, pattern: "^[a-f0-9]{64}$" }
+        type:
+          type: string
+          enum: [SpawnFromSpawner, MoveItem, MergeItems, SellItem, UndoLastSale, UnlockCell, ConsumeOrderItems, ClaimBoardReward, MoveToInventory, MoveFromInventory, RechargeSpawner]
+        payload:
+          type: object
+          additionalProperties: true
+          description: Command-specific identifiers/state only; economic amounts are forbidden.
+    OfflineSyncReceipt:
+      type: object
+      additionalProperties: false
+      required: [checkpointRevision, finalHash, acceptedCommandCount]
+      properties:
+        checkpointRevision: { type: integer, minimum: 1 }
+        finalHash: { type: string, pattern: "^[a-f0-9]{64}$" }
+        acceptedCommandCount: { type: integer, minimum: 1, maximum: 500 }
     SessionResponse:
       type: object
       additionalProperties: false
@@ -1178,6 +1605,26 @@ components:
         expiresAt:
           type: string
           format: date-time
+    SessionRefreshRequest:
+      type: object
+      additionalProperties: false
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+          minLength: 20
+          maxLength: 8192
+          writeOnly: true
+    SessionRevokeRequest:
+      type: object
+      additionalProperties: false
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+          minLength: 20
+          maxLength: 8192
+          writeOnly: true
     Problem:
       type: object
       additionalProperties: false

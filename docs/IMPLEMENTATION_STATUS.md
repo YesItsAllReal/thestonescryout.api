@@ -1,9 +1,10 @@
 # Checkpoint 6 implementation status
 
-Last verified: 2026-08-31
+Last verified: 2026-09-03
 
-Architecture: AWS serverless/DynamoDB is approved by ADR 0001. No AWS resources,
-credentials, domains, or external services have been created or configured.
+Architecture: AWS serverless/DynamoDB is approved by ADR 0001. Dev environment
+resources have been provisioned in us-east-1 (account 598628878271). See the
+provisioned resources section below for identifiers.
 
 ## Verified locally
 
@@ -66,6 +67,53 @@ credentials, domains, or external services have been created or configured.
 - The commerce repository boundary groups global dedupe, balance/ledger grants,
   and entitlement changes as one atomic operation. In-memory tests cover duplicate
   transactions/events across new idempotency keys and cross-player ownership.
+- Public content catalog and remote-configuration services depend on repository,
+  detached-signature verifier, and HTTPS URL-policy ports rather than S3,
+  CloudFront, or key-service types. No bucket, distribution, hostname, or key ID
+  has been selected.
+- Catalog validation requires unique pack IDs, approved editorial status, valid
+  checksums/sizes/build ranges, a matching environment channel, allowlisted CDN
+  URLs, and at least one permanent starter pack.
+- Signed configuration has a fixed feature-flag shape and compiled safe bounds for
+  starting balances, energy, regeneration, daily gifts, and rewarded-ad limits.
+  Unsafe values or public links are rejected even after signature acceptance.
+- Shared framework-neutral HTTP support now performs per-route rate limiting,
+  bearer verification, correlation IDs, privacy-safe structured logging, JSON
+  parsing, and problem responses without importing API Gateway or Lambda types.
+- Account profile/deletion handlers enforce principal-derived resource access,
+  map nested Apple reauthentication only into the policy port, and never log
+  bearer/provider credentials or request bodies.
+- Save read/write handlers support slot selection, strict transport validation,
+  idempotency headers, and explicit revision-conflict documents containing only
+  current revision/schema/update metadata—not either snapshot.
+- Apple sign-in/link handlers apply public/authenticated rate limits, validate the
+  strict credential envelope, map provider verification failures safely, and
+  return only an opaque conflict ID plus allowed save choices—never either
+  conflicting player identifier.
+- Economy handlers expose authoritative balances, recognized spend/reward inputs,
+  explicit revision and insufficient-funds conflicts, and player-scoped
+  entitlements. Public ledger entries intentionally omit internal idempotency key,
+  client-build, and content-version storage fields.
+- Handler tests confirm Apple identity tokens, nonces, bearer tokens, reward claim
+  tokens, source IPs, request bodies, and internal ledger metadata are not logged
+  or returned outside their contract.
+- Purchase, App Store notification, and rewarded-ad handlers now enforce their
+  authenticated/public boundaries, strict transport shapes, provider-safe error
+  mapping, idempotency headers, and public commerce response projection. Signed
+  transaction/notification/ad payloads are never logged or echoed.
+- Content catalog/configuration handlers require explicit platform/build/locale
+  (and catalog channel) query inputs, apply public rate limits, and map signature,
+  policy, or availability failures to a generic `503` without leaking key/policy
+  diagnostics.
+- The application composition root now assembles all 17 contract routes from
+  domain services and shared handler dependencies without eagerly accessing AWS
+  or provider implementations.
+- An exact method/path router rejects duplicate route definitions at startup,
+  distinguishes `404` from `405`, and contains escaped handler failures as
+  privacy-safe `500` responses.
+- A structural API Gateway HTTP API v2 adapter maps raw paths, methods, headers,
+  cookies, query parameters, source IPs, and plain/base64 request bodies to the
+  framework-neutral request model. It imports no AWS SDK or Lambda type package.
 - In-memory guest repository provides same-request replay, rejects changed-input
   idempotency-key reuse, and recovers one player per installation hash.
 - Framework-neutral handlers compatible with an API Gateway HTTP API adapter
@@ -76,28 +124,166 @@ credentials, domains, or external services have been created or configured.
 - DynamoDB access patterns, keys, transactional conditions, idempotency records,
   secondary-index policy, and versioned migration process are documented in
   `docs/dynamodb-data-model.md`.
+- Runtime configuration now fails closed unless the environment name, player
+  table, HTTPS token issuer, and token audience are supplied explicitly; no AWS
+  account, Region, table, issuer, or client identifier is hardcoded.
+- The concrete Cognito JWT verifier is implemented locally. It resolves issuer
+  JWKS at runtime and enforces RS256, exact issuer, expiry/time claims,
+  `token_use=access`, exact `client_id`, immutable UUID `player_id`, and bounded
+  `session_kind`, returning only a minimal domain principal.
+- Offline RSA tests cover valid principals, wrong token use/client, expiration,
+  missing application identity, and invalid/unsupported signatures. Cognito must
+  still be configured to inject authoritative `player_id` and `session_kind`
+  claims; the token contract is recorded in
+  `docs/authentication-token-contract.md`.
+- The API contract now defines refresh-token rotation and authenticated session
+  revocation endpoints. Framework-neutral services and handlers keep opaque
+  refresh credentials out of URLs/logs, map invalid credentials generically,
+  and require revocation to bind the credential to the verified player.
+- The concrete Apple JWKS verifier is implemented locally. It enforces Apple's
+  exact issuer, an environment-supplied audience, RS256/JWKS signature, expiry,
+  bounded subject, and a constant-time match between the token nonce and the
+  SHA-256 digest of the caller's raw nonce.
+- Offline RSA tests cover valid Apple assertions, issuer/audience mismatch,
+  expiry, nonce mismatch, missing/malformed subjects, and unsupported signing
+  algorithms. Platform identifiers and any authorization-code/private-key
+  workflow remain undeployed and are documented in
+  `docs/apple-identity-verification.md`.
+- The concrete DynamoDB guest repository is implemented locally. It uses
+  consistent reads and a conditional transaction to create the player,
+  installation mapping, and expiring hashed-key idempotency result atomically;
+  contention recovers the winning installation without retaining the raw ID.
+- Guest creation now initializes the authoritative revision-one balance in that
+  same transaction. Starting coins, gems, and energy are injected from trusted
+  server configuration and never accepted from the session request.
+- Offline adapter tests inspect generated DynamoDB commands and cover atomic
+  creation, identical replay, changed-request rejection, and transaction-race
+  recovery. The adapter is not yet wired into or deployed to the Lambda.
+- The concrete DynamoDB save repository is implemented locally with strongly
+  consistent player/slot reads, exact revision conditions, atomic save/result
+  transactions, player-scoped hashed idempotency keys, durable original-result
+  replay, and explicit metadata-only conflict recovery after concurrent writes.
+- Serialized save snapshots are capped at 300 KiB so the save and replay items
+  retain safe metadata headroom below DynamoDB's 400 KiB per-item limit.
+- The concrete DynamoDB account repository is implemented locally with strongly
+  consistent principal-scoped profile reads and strict storage-version checks.
+  Account deletion atomically transitions the profile, creates a resumable job,
+  appends one immutable audit event, and stores the original receipt before the
+  service invokes session revocation. Later retries reuse the durable job and do
+  not create duplicate audit events.
+- Apple linking now exposes separate persistence operations for an initial guest
+  link and an explicit conflict resolution. This prevents a DynamoDB adapter
+  from treating `preferGuestSave` or `preferExistingSave` as a simple provider
+  pointer update; resolution must pass through the forthcoming atomic
+  save/economy/entitlement reconciliation boundary.
 - CI runs OpenAPI lint, strict TypeScript compilation, and Node tests.
+- A local AWS persistence composition factory now assembles the concrete guest,
+  account, Apple sign-in/link, save, and offline-sync DynamoDB adapters without
+  network access at construction. Explicit account-link reconciliation resolution remains
+  fail-closed until its full reconciliation transaction is implemented.
+- A local AWS identity-service composition factory now combines those concrete
+  repositories with the Cognito access-token verifier, Apple identity verifier,
+  guest/account/save services, and injected provider lifecycle ports. Factory
+  construction is covered by an offline test and performs no AWS or Apple calls.
+- The approved Cognito Option 1 Lite boundary now validates Cognito token output,
+  requires rotated refresh credentials, hashes credentials before ownership
+  persistence, binds revocation to the authoritative player, and derives the
+  principal through an active DynamoDB profile lookup keyed by a signed,
+  backend-created UUID username. This avoids paid V2 access-token customization.
+- A staged Amazon Q handoff is recorded in
+  `docs/amazon-q/checkpoint-6-cognito-option-1-lite.md`; its first phase is
+  read-only and must stop for owner approval before changing AWS.
+- Local implementation of Cognito custom-auth gateway, DynamoDB refresh
+  credential registry, and Cognito trigger dispatcher is complete and tested.
+  225/225 local tests pass. Concrete adapters are not yet deployed to Lambda.
+  No AWS deployment has occurred for this checkpoint.
+- SCO_APPLE_AUDIENCE is now optional at Lambda startup. When absent, Apple
+  sign-in routes return 503 and all other routes function normally. Apple
+  deployment remains blocked until com.itsallrealministries.stonescryout is
+  confirmed as Sign in with Apple-enabled in the Apple Developer portal.
+- Lambda artifacts are produced by npm run bundle (esbuild CJS + package + validate).
+  Both runtime dependencies (jose, AWS SDK) and application code are bundled
+  into self-contained CJS files. Artifact validation runs a child Node process
+  that requires() each bundle and asserts typeof handler === "function", failing
+  on every unexpected error including cold-start failures.
+- The future API Lambda IAM policy requires exactly five Cognito actions:
+  AdminCreateUser, AdminGetUser, AdminSetUserPassword, AdminInitiateAuth,
+  AdminRespondToAuthChallenge. AdminGetUser is required for every repeat
+  sign-in (existing shadow users) and must not be omitted.
+- Owner-approved development economy starting values: 200 coins, 20 gems,
+  200 energy, energyCap=200. These are trusted server configuration values
+  supplied via Lambda environment variables and signed remote configuration.
+  They are never accepted from client session requests.
+- The final ordered deployment runbook, exact PowerShell commands, policies,
+  preflight checks, rollback snapshot capture, smoke test script, complete
+  rollback commands, and cost estimate are recorded in
+  `docs/deployment-runbook-checkpoint-6.md`.
+- The following changes are planned but not yet applied to AWS:
+  - Identity Center setup and ScoDevOperator permission set (preferred over
+    long-lived IAM user; do not create both).
+  - Trusted-administrator one-time: sco-dev-cognito-triggers-role, trigger
+    log group, trigger Lambda (deployed from validated artifact), AddPermission,
+    updated sco-dev-lambda-role policy with five Cognito actions.
+  - Cognito pool: AllowAdminCreateUserOnly=true, AccountRecoverySetting=admin_only,
+    LambdaConfig with custom-auth triggers, RefreshTokenRotation enabled,
+    ExplicitAuthFlows=[ALLOW_CUSTOM_AUTH] (ALLOW_REFRESH_TOKEN_AUTH removed).
+  - DynamoDB TTL enabled on sco-dev-players (attribute: ttl).
+  - Lambda sco-dev-api environment variables set per runbook, including
+    SCO_REFRESH_LIFETIME_SECONDS=2592000 (matching 30-day app client setting),
+    SCO_GUEST_STARTING_COINS=200, SCO_GUEST_STARTING_GEMS=20,
+    SCO_GUEST_STARTING_ENERGY=200. SCO_APPLE_AUDIENCE omitted until confirmed.
+  - Lambda sco-dev-api code updated to the bundled concrete adapter artifact.
+  - Apple authentication deployment blocked until Apple Developer portal
+    confirmation is recorded.
 
 ## Next contract-first slices
 
-1. Signed content catalog and bounded remote-configuration descriptors.
-2. Product-approved consumable refund/clawback or debt-reconciliation policy;
+1. Product-approved consumable refund/clawback or debt-reconciliation policy;
    current notification handling updates known entitlement/transaction state but
    never invents a currency debit policy.
-3. Provider revocation lifecycle and durable security/account/economy audit event
+2. Provider revocation lifecycle and durable security/account/economy audit event
    adapters.
-4. Concrete DynamoDB, Cognito, CloudWatch, API Gateway, and content-delivery
-   adapters only after their identifiers and environment layout are approved.
+3. Concrete DynamoDB, Cognito, CloudWatch, API Gateway, and content-delivery
+   adapters replacing the in-memory stubs wired in `src/lambda/index.ts`.
 
-## Decisions required before infrastructure or federation work
+## Provisioned dev environment (us-east-1, account 598628878271)
 
-- AWS account and Region for development, TestFlight staging, and production.
-- Physical resource naming and isolation strategy.
-- Cognito user-pool/client IDs and approved token issuer/audience per environment.
-- Apple Services ID/bundle association and redirect URLs; no private key or
-  credential belongs in this repository or logs.
-- Public API and CDN hostnames, content bucket/distribution identifiers, retention
-  periods, and key-management choices.
+All resources use the `sco-dev-` prefix and are fully isolated from existing
+`itsallreal.org` and `bmerge-*` resources.
 
-The OpenAPI server URL remains `https://api.invalid` until public environment URLs
-are explicitly approved.
+- IAM role: `sco-dev-lambda-role` — least-privilege, scoped to sco-dev-players,
+  /sco/dev/* SSM parameters, and /sco/dev/api log group.
+- DynamoDB table: `sco-dev-players` — pk+sk, on-demand billing, no PITR (dev).
+- Lambda function: `sco-dev-api` — Node 22, arm64, 512MB, 10s, handler
+  `src/lambda/index.handler`. Currently wired with in-memory adapters.
+- API Gateway HTTP API: `sco-dev-api` (id: q0zoa13ye9) — $default stage,
+  auto-deploy, 20 req/s rate limit, 50 burst.
+  Endpoint: https://q0zoa13ye9.execute-api.us-east-1.amazonaws.com
+- S3 bucket: `sco-dev-content-598628878271` — fully private, OAC-only access.
+- CloudFront distribution: E1WW3HKF9297IA — no alias, HTTPS-only, HTTP/2+3,
+  PriceClass_100. Domain: https://d34mfol19lzvcv.cloudfront.net
+- Cognito user pool: `sco-dev-users` (id: us-east-1_SDheytSys) — deletion
+  protection on, MFA off.
+  Issuer: https://cognito-idp.us-east-1.amazonaws.com/us-east-1_SDheytSys
+  LIVE STATE: AllowAdminCreateUserOnly=false (self-registration currently open).
+  PLANNED: AllowAdminCreateUserOnly=true, AccountRecoverySetting=admin_only,
+  LambdaConfig with custom-auth triggers — requires separate deployment approval.
+- Cognito app client: `sco-dev-mobile` (id: 5vkq6jm3vbulh6v8n4f565benr) —
+  no secret, platform-agnostic, CUSTOM_AUTH + REFRESH_TOKEN, 60min access
+  token, 30-day refresh token.
+- CloudWatch log groups: /sco/dev/api and /sco/dev/apigw — 14-day retention.
+
+## Decisions required before staging/production or federation work
+
+- Resolve duplicate itsallreal.org hosted zones before adding any DNS records.
+- Apple Services ID/bundle ID per environment for identity token audience.
+  No private key or credential belongs in this repository or logs.
+- Approved subdomain for API (e.g. sco-api.itsallreal.org) pending hosted
+  zone resolution.
+- Staging and production environment provisioning (same pattern, sco-staging-
+  and sco-prod- prefixes).
+- Key-management choices (customer KMS keys) when moving to production.
+- PITR and backup policy for staging/production tables.
+
+The OpenAPI server URL remains `https://api.invalid` until a custom domain is
+approved and configured.

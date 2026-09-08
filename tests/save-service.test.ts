@@ -7,6 +7,7 @@ import {
   SaveIdempotencyConflictError,
   SaveRevisionConflictError,
   SaveService,
+  SaveValidationError,
   type SaveWriteRequest,
 } from "../src/saves/save-service.js";
 import { Sha256SaveDeviceIdHasher } from "../src/saves/sha256-save-device-id-hasher.js";
@@ -113,4 +114,16 @@ test("idempotency keys are scoped by authenticated player", async () => {
   });
   assert.equal(first.revision, 1);
   assert.equal(second.revision, 1);
+});
+
+test("rejects snapshots that cannot fit safely in one DynamoDB item", async () => {
+  const context = service();
+  await assert.rejects(
+    context.service.put({
+      principal,
+      request: { ...request, snapshot: { payload: "x".repeat(307_201) } },
+      idempotencyKey: "save-write-large",
+    }),
+    SaveValidationError,
+  );
 });

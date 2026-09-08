@@ -45,9 +45,17 @@ export interface AppleAccountRepository {
     readonly issuer: string;
     readonly subject: string;
     readonly idempotencyKey: string;
-    readonly resolution?: LinkResolution | undefined;
     readonly now: Date;
   }): Promise<AppleLinkResult>;
+
+  resolveLinkConflict(input: {
+    readonly guestPlayerId: string;
+    readonly issuer: string;
+    readonly subject: string;
+    readonly idempotencyKey: string;
+    readonly resolution: LinkResolution;
+    readonly now: Date;
+  }): Promise<{ readonly kind: "linked"; readonly player: PlayerProfile }>;
 }
 
 export class AppleCredentialValidationError extends Error {}
@@ -100,13 +108,15 @@ export class AppleAccountService {
     validateResolution(input.resolution);
     const timestamp = this.now();
     const identity = await this.verify(input.credential, timestamp);
-    const result = await this.repository.linkGuest({
+    const common = {
       guestPlayerId: input.principal.playerId,
       ...identity,
       idempotencyKey: input.idempotencyKey,
-      resolution: input.resolution,
       now: timestamp,
-    });
+    };
+    const result = input.resolution === undefined
+      ? await this.repository.linkGuest(common)
+      : await this.repository.resolveLinkConflict({ ...common, resolution: input.resolution });
     if (result.kind === "decisionRequired") {
       throw new AccountLinkDecisionRequiredError(
         result.conflictId,

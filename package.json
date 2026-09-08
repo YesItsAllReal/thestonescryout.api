@@ -8,13 +8,26 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "build:lambda": "node scripts/build-lambda.mjs",
+    "package:lambda": "node scripts/package-lambda.mjs",
+    "validate:artifact": "node scripts/validate-artifact.mjs",
+    "validate:ps1": "node scripts/validate-ps1.mjs",
+    "test:scripts": "powershell -NoProfile -File scripts/test-scripts.ps1",
+    "bundle": "npm run build:lambda && npm run package:lambda && npm run validate:artifact",
     "contract:lint": "redocly lint openapi/product-api.yaml",
     "test": "npm run build && node --test dist/tests/**/*.test.js",
-    "check": "npm run contract:lint && npm test"
+    "check": "npm run contract:lint && npm run validate:ps1 && npm run test:scripts && npm test"
   },
   "devDependencies": {
     "@redocly/cli": "^2.49.0",
     "@types/node": "^22.15.0",
+    "esbuild": "^0.28.2",
     "typescript": "^5.9.0"
+  },
+  "dependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "^3.1127.0",
+    "@aws-sdk/client-dynamodb": "^3.1124.0",
+    "@aws-sdk/lib-dynamodb": "^3.1124.0",
+    "jose": "^6.2.10"
   }
 }

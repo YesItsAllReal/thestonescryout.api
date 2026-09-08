@@ -1,8 +1,13 @@
 export interface HttpRequest {
+  readonly rawPath?: string | undefined;
   readonly body?: string | undefined;
   readonly headers?: Readonly<Record<string, string | undefined>> | undefined;
+  readonly queryStringParameters?: Readonly<Record<string, string | undefined>> | undefined;
   readonly requestContext?: {
-    readonly http?: { readonly sourceIp?: string | undefined } | undefined;
+    readonly http?: {
+      readonly method?: string | undefined;
+      readonly sourceIp?: string | undefined;
+    } | undefined;
   } | undefined;
 }
 
@@ -25,4 +30,11 @@ export interface RateLimiter {
 export interface StructuredLogger {
   info(event: Readonly<Record<string, string | number | boolean>>): void;
   error(event: Readonly<Record<string, string | number | boolean>>): void;
+}
+
+export interface AuthenticatedHandlerDependencies {
+  readonly tokenVerifier: import("../auth/authentication.js").AccessTokenVerifier;
+  readonly rateLimiter: RateLimiter;
+  readonly logger: StructuredLogger;
+  readonly now: () => Date;
 }

@@ -46,6 +46,23 @@ export function problem(
   };
 }
 
+export function problemWithFields(
+  statusCode: number,
+  requestId: string,
+  title: string,
+  type: string,
+  fields: Readonly<Record<string, string | number | readonly string[]>>,
+): HttpResponse {
+  return {
+    statusCode,
+    headers: {
+      "content-type": "application/problem+json",
+      "x-request-id": requestId,
+    },
+    body: JSON.stringify({ type, title, status: statusCode, requestId, ...fields }),
+  };
+}
+
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }

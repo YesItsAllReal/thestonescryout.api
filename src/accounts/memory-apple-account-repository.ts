@@ -63,7 +63,6 @@ export class MemoryAppleAccountRepository implements AppleAccountRepository {
       input.guestPlayerId,
       input.issuer,
       input.subject,
-      input.resolution ?? null,
     ]);
     const replay = this.links.get(input.idempotencyKey);
     if (replay !== undefined) return replayOrThrow(replay, fingerprint);
@@ -80,7 +79,7 @@ export class MemoryAppleAccountRepository implements AppleAccountRepository {
       this.players.set(linked.playerId, linked);
       this.playerIdByProvider.set(key, linked.playerId);
       result = { kind: "linked", player: linked };
-    } else if (input.resolution === undefined) {
+    } else {
       const conflictId = randomUUID();
       this.conflicts.set(conflictId, {
         guestPlayerId: input.guestPlayerId,
@@ -93,9 +92,32 @@ export class MemoryAppleAccountRepository implements AppleAccountRepository {
         guestPlayerId: input.guestPlayerId,
         existingPlayerId: existingId,
       };
-    } else {
-      result = this.resolve(input.resolution.conflictId, input.resolution.saveChoice, input.guestPlayerId, key);
     }
+    this.links.set(input.idempotencyKey, { fingerprint, result });
+    return result;
+  }
+
+  public async resolveLinkConflict(
+    input: Parameters<AppleAccountRepository["resolveLinkConflict"]>[0],
+  ): Promise<{ readonly kind: "linked"; readonly player: PlayerProfile }> {
+    const fingerprint = JSON.stringify([
+      input.guestPlayerId,
+      input.issuer,
+      input.subject,
+      input.resolution,
+    ]);
+    const replay = this.links.get(input.idempotencyKey);
+    if (replay !== undefined) {
+      const result = replayOrThrow(replay, fingerprint);
+      if (result.kind !== "linked") throw new Error("stored resolution result is invalid");
+      return result;
+    }
+    const result = this.resolve(
+      input.resolution.conflictId,
+      input.resolution.saveChoice,
+      input.guestPlayerId,
+      providerKey(input.issuer, input.subject),
+    );
     this.links.set(input.idempotencyKey, { fingerprint, result });
     return result;
   }
@@ -105,7 +127,7 @@ export class MemoryAppleAccountRepository implements AppleAccountRepository {
     saveChoice: "preferGuestSave" | "preferExistingSave",
     guestPlayerId: string,
     key: string,
-  ): AppleLinkResult {
+  ): { readonly kind: "linked"; readonly player: PlayerProfile } {
     const conflict = this.conflicts.get(conflictId);
     if (
       conflict === undefined ||
