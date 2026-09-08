@@ -1,6 +1,6 @@
 # Checkpoint 6 implementation status
 
-Last verified: 2026-09-03
+Last verified: 2026-09-08
 
 Architecture: AWS serverless/DynamoDB is approved by ADR 0001. Dev environment
 resources have been provisioned in us-east-1 (account 598628878271). See the
@@ -195,9 +195,16 @@ provisioned resources section below for identifiers.
   read-only and must stop for owner approval before changing AWS.
 - Local implementation of Cognito custom-auth gateway, DynamoDB refresh
   credential registry, and Cognito trigger dispatcher is complete and tested.
-  225/225 local tests pass. Concrete adapters are not yet deployed to Lambda.
-  No AWS deployment has occurred for this checkpoint.
-- SCO_APPLE_AUDIENCE is now optional at Lambda startup. When absent, Apple
+  244/244 local tests pass (225 pre-deployment + 19 new focused gateway tests
+  added post-deployment). Concrete adapters are deployed to Lambda.
+  Checkpoint 6 deployment is complete. Deployment-time fixes (Bugs 1–4) are
+  live. Post-deployment revocation hardening (Bug 5, revoke() error handling)
+  is local only and awaits a separately approved Lambda redeployment. The
+  working tree must be committed locally before that redeployment. Source
+  commit 510f857 predates all deployment-time fixes. See
+  `docs/amazon-q/checkpoint-6-deployment-handoff.md` for the full deployment
+  record, discovered bugs, and live AWS state.
+- SCO_APPLE_AUDIENCE is optional at Lambda startup. When absent, Apple
   sign-in routes return 503 and all other routes function normally. Apple
   deployment remains blocked until com.itsallrealministries.stonescryout is
   confirmed as Sign in with Apple-enabled in the Apple Developer portal.
@@ -219,22 +226,10 @@ provisioned resources section below for identifiers.
   rollback commands, and cost estimate are recorded in
   `docs/deployment-runbook-checkpoint-6.md`.
 - The following changes are planned but not yet applied to AWS:
-  - Identity Center setup and ScoDevOperator permission set (preferred over
-    long-lived IAM user; do not create both).
-  - Trusted-administrator one-time: sco-dev-cognito-triggers-role, trigger
-    log group, trigger Lambda (deployed from validated artifact), AddPermission,
-    updated sco-dev-lambda-role policy with five Cognito actions.
-  - Cognito pool: AllowAdminCreateUserOnly=true, AccountRecoverySetting=admin_only,
-    LambdaConfig with custom-auth triggers, RefreshTokenRotation enabled,
-    ExplicitAuthFlows=[ALLOW_CUSTOM_AUTH] (ALLOW_REFRESH_TOKEN_AUTH removed).
-  - DynamoDB TTL enabled on sco-dev-players (attribute: ttl).
-  - Lambda sco-dev-api environment variables set per runbook, including
-    SCO_REFRESH_LIFETIME_SECONDS=2592000 (matching 30-day app client setting),
-    SCO_GUEST_STARTING_COINS=200, SCO_GUEST_STARTING_GEMS=20,
-    SCO_GUEST_STARTING_ENERGY=200. SCO_APPLE_AUDIENCE omitted until confirmed.
-  - Lambda sco-dev-api code updated to the bundled concrete adapter artifact.
+  - Identity Center setup and ScoDevOperator permission set (skipped for
+    single-developer machine; ItsAllRealAdmin used directly).
   - Apple authentication deployment blocked until Apple Developer portal
-    confirmation is recorded.
+    confirmation is recorded. SCO_APPLE_AUDIENCE must not be set until then.
 
 ## Next contract-first slices
 
@@ -243,8 +238,8 @@ provisioned resources section below for identifiers.
    never invents a currency debit policy.
 2. Provider revocation lifecycle and durable security/account/economy audit event
    adapters.
-3. Concrete DynamoDB, Cognito, CloudWatch, API Gateway, and content-delivery
-   adapters replacing the in-memory stubs wired in `src/lambda/index.ts`.
+3. Apple authentication: set SCO_APPLE_AUDIENCE once Apple Developer portal
+   confirms com.itsallrealministries.stonescryout is Sign in with Apple-enabled.
 
 ## Provisioned dev environment (us-east-1, account 598628878271)
 
@@ -252,10 +247,18 @@ All resources use the `sco-dev-` prefix and are fully isolated from existing
 `itsallreal.org` and `bmerge-*` resources.
 
 - IAM role: `sco-dev-lambda-role` — least-privilege, scoped to sco-dev-players,
-  /sco/dev/* SSM parameters, and /sco/dev/api log group.
+  /sco/dev/* SSM parameters, /sco/dev/api log group, and five Cognito admin
+  actions on the sco-dev user pool.
+- IAM role: `sco-dev-cognito-triggers-role` — Lambda trust, logs-only policy
+  scoped to /sco/dev/cognito-triggers.
 - DynamoDB table: `sco-dev-players` — pk+sk, on-demand billing, no PITR (dev).
-- Lambda function: `sco-dev-api` — Node 22, arm64, 512MB, 10s, handler
-  `src/lambda/index.handler`. Currently wired with in-memory adapters.
+  TTL enabled on attribute `ttl`.
+- Lambda function: `sco-dev-api` — Node 22, arm64, 512 MB, 10 s, handler
+  `api.handler`. Wired with concrete Cognito and DynamoDB adapters.
+  Ten required environment variables set. SCO_APPLE_AUDIENCE absent.
+- Lambda function: `sco-dev-cognito-triggers` — Node 22, arm64, 128 MB, 5 s,
+  handler `cognito-triggers.handler`. Dispatches DefineAuth, CreateAuth,
+  VerifyAuth triggers. JSON log format, /sco/dev/cognito-triggers log group.
 - API Gateway HTTP API: `sco-dev-api` (id: q0zoa13ye9) — $default stage,
   auto-deploy, 20 req/s rate limit, 50 burst.
   Endpoint: https://q0zoa13ye9.execute-api.us-east-1.amazonaws.com
@@ -263,15 +266,16 @@ All resources use the `sco-dev-` prefix and are fully isolated from existing
 - CloudFront distribution: E1WW3HKF9297IA — no alias, HTTPS-only, HTTP/2+3,
   PriceClass_100. Domain: https://d34mfol19lzvcv.cloudfront.net
 - Cognito user pool: `sco-dev-users` (id: us-east-1_SDheytSys) — deletion
-  protection on, MFA off.
+  protection on, MFA off, AllowAdminCreateUserOnly=true,
+  AccountRecoverySetting=admin_only. LambdaConfig wired to sco-dev-cognito-triggers
+  for DefineAuth, CreateAuth, and VerifyAuth.
   Issuer: https://cognito-idp.us-east-1.amazonaws.com/us-east-1_SDheytSys
-  LIVE STATE: AllowAdminCreateUserOnly=false (self-registration currently open).
-  PLANNED: AllowAdminCreateUserOnly=true, AccountRecoverySetting=admin_only,
-  LambdaConfig with custom-auth triggers — requires separate deployment approval.
 - Cognito app client: `sco-dev-mobile` (id: 5vkq6jm3vbulh6v8n4f565benr) —
-  no secret, platform-agnostic, CUSTOM_AUTH + REFRESH_TOKEN, 60min access
-  token, 30-day refresh token.
-- CloudWatch log groups: /sco/dev/api and /sco/dev/apigw — 14-day retention.
+  no secret, ALLOW_CUSTOM_AUTH only (ALLOW_REFRESH_TOKEN_AUTH removed),
+  RefreshTokenRotation=ENABLED RetryGracePeriodSeconds=0,
+  60 min access token, 30-day refresh token.
+- CloudWatch log groups: /sco/dev/api, /sco/dev/apigw, /sco/dev/cognito-triggers
+  — 14-day retention.
 
 ## Decisions required before staging/production or federation work
 

@@ -7,6 +7,8 @@ import {
   AdminInitiateAuthCommand,
   AdminRespondToAuthChallengeCommand,
   AdminSetUserPasswordCommand,
+  GetTokensFromRefreshTokenCommand,
+  RevokeTokenCommand,
   type CognitoIdentityProviderClient,
 } from "@aws-sdk/client-cognito-identity-provider";
 
@@ -300,3 +302,205 @@ test("non-UUID playerId throws CognitoGatewayConfigurationError", async () => {
   );
   assert.equal(client.commands.length, 0);
 });
+
+// ---------------------------------------------------------------------------
+// refreshWithRotation — command shape
+// ---------------------------------------------------------------------------
+
+const REFRESH_TOKEN_RAW = "refresh-token-value-for-rotation-test-0001";
+
+const REFRESH_RESULT = {
+  AuthenticationResult: {
+    AccessToken:  "new-access-token-value-00000001",
+    RefreshToken: "new-refresh-token-value-00000001",
+    ExpiresIn:    3600,
+  },
+};
+
+test("refreshWithRotation sends GetTokensFromRefreshTokenCommand with ClientId and RefreshToken", async () => {
+  const client = new ScriptedCognito([REFRESH_RESULT]);
+  await adapter(client).refreshWithRotation(REFRESH_TOKEN_RAW);
+
+  assert.equal(client.commands.length, 1);
+  assert.ok(client.commands[0] instanceof GetTokensFromRefreshTokenCommand);
+  const cmd = client.commands[0] as GetTokensFromRefreshTokenCommand;
+  assert.equal(cmd.input.ClientId, CLIENT_ID);
+  assert.equal(cmd.input.RefreshToken, REFRESH_TOKEN_RAW);
+});
+
+test("refreshWithRotation maps AuthenticationResult fields to CognitoIssuedTokens", async () => {
+  const client = new ScriptedCognito([REFRESH_RESULT]);
+  const tokens = await adapter(client).refreshWithRotation(REFRESH_TOKEN_RAW);
+
+  assert.equal(tokens.accessToken,      REFRESH_RESULT.AuthenticationResult.AccessToken);
+  assert.equal(tokens.refreshToken,     REFRESH_RESULT.AuthenticationResult.RefreshToken);
+  assert.equal(tokens.expiresInSeconds, REFRESH_RESULT.AuthenticationResult.ExpiresIn);
+});
+
+test("missing AuthenticationResult in refresh response fails closed", async () => {
+  const client = new ScriptedCognito([{}]);
+  await assert.rejects(
+    adapter(client).refreshWithRotation(REFRESH_TOKEN_RAW),
+    CognitoSessionRejectedError,
+  );
+});
+
+test("null AuthenticationResult in refresh response fails closed", async () => {
+  const client = new ScriptedCognito([{ AuthenticationResult: null }]);
+  await assert.rejects(
+    adapter(client).refreshWithRotation(REFRESH_TOKEN_RAW),
+    CognitoSessionRejectedError,
+  );
+});
+
+test("AuthenticationResult missing AccessToken fails closed", async () => {
+  const client = new ScriptedCognito([{
+    AuthenticationResult: { RefreshToken: "rt", ExpiresIn: 3600 },
+  }]);
+  await assert.rejects(
+    adapter(client).refreshWithRotation(REFRESH_TOKEN_RAW),
+    CognitoSessionRejectedError,
+  );
+});
+
+test("AuthenticationResult missing RefreshToken fails closed", async () => {
+  const client = new ScriptedCognito([{
+    AuthenticationResult: { AccessToken: "at", ExpiresIn: 3600 },
+  }]);
+  await assert.rejects(
+    adapter(client).refreshWithRotation(REFRESH_TOKEN_RAW),
+    CognitoSessionRejectedError,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// refreshWithRotation — Cognito rejection mapping
+// ---------------------------------------------------------------------------
+
+function cognitoError(name: string): Error {
+  const e = new Error(name); e.name = name; return e;
+}
+
+test("Cognito rejection maps to the generic lifecycle error", async () => {
+  for (const name of ["NotAuthorizedException", "InvalidParameterException", "RefreshTokenReuseException"]) {
+    const client = new ScriptedCognito([cognitoError(name)]);
+    await assert.rejects(
+      adapter(client).refreshWithRotation(REFRESH_TOKEN_RAW),
+      CognitoSessionRejectedError,
+    );
+  }
+});
+
+test("refresh service fault maps to a privacy-safe error", async () => {
+  const client = new ScriptedCognito([cognitoError("InternalErrorException")]);
+  await assert.rejects(
+    adapter(client).refreshWithRotation(REFRESH_TOKEN_RAW),
+    CognitoSessionRejectedError,
+  );
+});
+
+test("refresh throttling maps to a privacy-safe error", async () => {
+  const client = new ScriptedCognito([cognitoError("TooManyRequestsException")]);
+  await assert.rejects(
+    adapter(client).refreshWithRotation(REFRESH_TOKEN_RAW),
+    CognitoSessionRejectedError,
+  );
+});
+
+test("refresh network failure maps to a privacy-safe error", async () => {
+  const networkError = new Error("fetch failed");
+  const client = new ScriptedCognito([networkError]);
+  await assert.rejects(
+    adapter(client).refreshWithRotation(REFRESH_TOKEN_RAW),
+    CognitoSessionRejectedError,
+  );
+});
+
+test("refresh error message contains no token or AWS response detail", async () => {
+  const client = new ScriptedCognito([cognitoError("NotAuthorizedException")]);
+  const err = await adapter(client).refreshWithRotation(REFRESH_TOKEN_RAW).catch(e => e);
+  assert.ok(err instanceof CognitoSessionRejectedError);
+  assert.ok(!err.message.includes(REFRESH_TOKEN_RAW), "error must not contain the raw token");
+  assert.ok(!err.message.includes("NotAuthorizedException"), "error must not expose Cognito error name");
+});
+
+// ---------------------------------------------------------------------------
+// revoke — command shape
+// ---------------------------------------------------------------------------
+
+test("revoke sends RevokeTokenCommand with ClientId and Token", async () => {
+  const client = new ScriptedCognito([{}]);
+  await adapter(client).revoke(REFRESH_TOKEN_RAW);
+
+  assert.equal(client.commands.length, 1);
+  assert.ok(client.commands[0] instanceof RevokeTokenCommand);
+  const cmd = client.commands[0] as RevokeTokenCommand;
+  assert.equal(cmd.input.ClientId, CLIENT_ID);
+  assert.equal(cmd.input.Token, REFRESH_TOKEN_RAW);
+});
+
+// ---------------------------------------------------------------------------
+// revoke — idempotent invalid-token outcomes succeed
+// ---------------------------------------------------------------------------
+
+test("revoke treats NotAuthorizedException as already-invalid idempotent success", async () => {
+  // NotAuthorizedException = token already revoked/expired — idempotent success.
+  const client = new ScriptedCognito([cognitoError("NotAuthorizedException")]);
+  await assert.doesNotReject(adapter(client).revoke(REFRESH_TOKEN_RAW));
+});
+
+test("revoke InvalidParameterException is treated as already-invalid success", async () => {
+  const client = new ScriptedCognito([cognitoError("InvalidParameterException")]);
+  await assert.doesNotReject(adapter(client).revoke(REFRESH_TOKEN_RAW));
+});
+
+// ---------------------------------------------------------------------------
+// revoke — non-idempotent failures surface as errors
+// ---------------------------------------------------------------------------
+
+test("revoke service fault surfaces as CognitoSessionRejectedError", async () => {
+  const client = new ScriptedCognito([cognitoError("InternalErrorException")]);
+  await assert.rejects(adapter(client).revoke(REFRESH_TOKEN_RAW), CognitoSessionRejectedError);
+});
+
+test("revoke throttling surfaces as CognitoSessionRejectedError", async () => {
+  const client = new ScriptedCognito([cognitoError("TooManyRequestsException")]);
+  await assert.rejects(adapter(client).revoke(REFRESH_TOKEN_RAW), CognitoSessionRejectedError);
+});
+
+test("revoke network failure surfaces as CognitoSessionRejectedError", async () => {
+  const networkError = new Error("fetch failed");
+  const client = new ScriptedCognito([networkError]);
+  await assert.rejects(adapter(client).revoke(REFRESH_TOKEN_RAW), CognitoSessionRejectedError);
+});
+
+test("revoke unexpected Cognito error surfaces as CognitoSessionRejectedError", async () => {
+  const client = new ScriptedCognito([cognitoError("UnexpectedLambdaException")]);
+  await assert.rejects(adapter(client).revoke(REFRESH_TOKEN_RAW), CognitoSessionRejectedError);
+});
+
+test("revoke error message contains no token or AWS response detail", async () => {
+  const client = new ScriptedCognito([cognitoError("InternalErrorException")]);
+  const err = await adapter(client).revoke(REFRESH_TOKEN_RAW).catch(e => e);
+  assert.ok(err instanceof CognitoSessionRejectedError);
+  assert.ok(!err.message.includes(REFRESH_TOKEN_RAW), "error must not contain the raw token");
+  assert.ok(!err.message.includes("InternalErrorException"), "error must not expose Cognito error name");
+});
+
+// ---------------------------------------------------------------------------
+// Compensation coverage note
+// ---------------------------------------------------------------------------
+// The compensation semantics (persistence failure → best-effort revocation,
+// revocation failure swallowed, original error authoritative) are tested
+// against the real production components:
+//
+// - CognitoSessionProvider.issue() compensation:
+//     tests/cognito-session-provider.test.ts
+//     "issue: DynamoDB registration failure triggers best-effort revocation..."
+//     "issue: conflicting/mismatched registration triggers compensation..."
+//     "issue: compensation revocation failure is swallowed..."
+//
+// - DynamoRefreshRegistry.rotate() compensation:
+//     tests/dynamo-refresh-registry.test.ts
+//     "rotate best-effort revokes replacement token when DynamoDB persistence fails"
+//     "rotate compensates on TransactionCanceledException..."

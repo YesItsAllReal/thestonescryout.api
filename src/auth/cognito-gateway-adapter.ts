@@ -6,6 +6,8 @@ import {
   AdminInitiateAuthCommand,
   AdminRespondToAuthChallengeCommand,
   AdminSetUserPasswordCommand,
+  GetTokensFromRefreshTokenCommand,
+  RevokeTokenCommand,
   type CognitoIdentityProviderClient,
 } from "@aws-sdk/client-cognito-identity-provider";
 
@@ -22,12 +24,7 @@ export class CognitoUnsupportedUserStateError extends Error {}
 // Only these two statuses are safe to proceed with.
 const ALLOWED_USER_STATUSES = new Set(["FORCE_CHANGE_PASSWORD", "CONFIRMED"]);
 
-// Fetch timeout for public Cognito API calls (ms).
-const PUBLIC_API_TIMEOUT_MS = 10_000;
-
 export class CognitoGatewayAdapter implements CognitoSessionGateway {
-  private readonly region: string;
-
   public constructor(
     private readonly client: CognitoIdentityProviderClient,
     private readonly userPoolId: string,
@@ -39,7 +36,6 @@ export class CognitoGatewayAdapter implements CognitoSessionGateway {
     if (clientId.trim() === "") {
       throw new CognitoGatewayConfigurationError("clientId is required");
     }
-    this.region = userPoolId.split("_")[0]!;
   }
 
   public async startCustomAuthentication(input: { readonly playerId: string }): Promise<CognitoIssuedTokens> {
@@ -51,24 +47,39 @@ export class CognitoGatewayAdapter implements CognitoSessionGateway {
   }
 
   public async refreshWithRotation(refreshToken: string): Promise<CognitoIssuedTokens> {
-    // GetTokensFromRefreshToken is a public API authenticated by the token itself.
-    // No IAM authorization is required or used.
-    const result = await this.cognitoPublicPost(
-      "AmazonCognitoIdentityProviderService.GetTokensFromRefreshToken",
-      { RefreshToken: refreshToken, ClientId: this.clientId },
-    );
-    return extractTokens(result);
+    try {
+      const result = await this.client.send(new GetTokensFromRefreshTokenCommand({
+        RefreshToken: refreshToken,
+        ClientId: this.clientId,
+      }));
+      return extractTokens(result.AuthenticationResult);
+    } catch (error) {
+      if (isNamed(error, "NotAuthorizedException") || isNamed(error, "InvalidParameterException") ||
+          isNamed(error, "RefreshTokenReuseException")) {
+        throw new CognitoSessionRejectedError("Cognito public API rejected the request");
+      }
+      if (error instanceof CognitoSessionRejectedError) throw error;
+      throw new CognitoSessionRejectedError("Cognito public API request failed");
+    }
   }
 
   public async revoke(refreshToken: string): Promise<void> {
-    // RevokeToken is a public API authenticated by the token itself.
-    // No IAM authorization is required or used.
-    // Already-invalid tokens are treated as successfully revoked.
-    await this.cognitoPublicPost(
-      "AmazonCognitoIdentityProviderService.RevokeToken",
-      { Token: refreshToken, ClientId: this.clientId },
-      ["InvalidParameterException"],
-    );
+    // NotAuthorizedException and InvalidParameterException both indicate the
+    // token is already invalid/revoked — treat as idempotent success.
+    // All other errors (throttling, service faults, network) are converted to
+    // a privacy-safe error without exposing token values or AWS response detail.
+    try {
+      await this.client.send(new RevokeTokenCommand({
+        Token: refreshToken,
+        ClientId: this.clientId,
+      }));
+    } catch (error) {
+      if (isNamed(error, "NotAuthorizedException") ||
+          isNamed(error, "InvalidParameterException")) {
+        return;
+      }
+      throw new CognitoSessionRejectedError("Cognito revocation request failed");
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -170,42 +181,6 @@ export class CognitoGatewayAdapter implements CognitoSessionGateway {
     return extractTokens(respondResult.AuthenticationResult);
   }
 
-  private async cognitoPublicPost(
-    target: string,
-    body: Record<string, string>,
-    ignoredErrorTypes: string[] = [],
-  ): Promise<unknown> {
-    const endpoint = `https://cognito-idp.${this.region}.amazonaws.com/`;
-    let response: Response;
-    try {
-      // Fix 8: bounded timeout — map timeout/network failures to generic errors
-      // without logging tokens or request/response bodies.
-      response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-amz-json-1.1",
-          "X-Amz-Target": target,
-        },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(PUBLIC_API_TIMEOUT_MS),
-      });
-    } catch {
-      // Swallow all network/timeout details — never log body or token values.
-      throw new CognitoSessionRejectedError("Cognito public API request failed");
-    }
-    let json: unknown;
-    try {
-      json = await response.json();
-    } catch {
-      throw new CognitoSessionRejectedError("Cognito public API returned a non-JSON response");
-    }
-    if (!response.ok) {
-      const errorType = (json as Record<string, unknown>)["__type"];
-      if (typeof errorType === "string" && ignoredErrorTypes.includes(errorType)) return json;
-      throw new CognitoSessionRejectedError("Cognito public API rejected the request");
-    }
-    return json;
-  }
 }
 
 function discardedPassword(): string {

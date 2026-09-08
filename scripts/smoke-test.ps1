@@ -146,10 +146,10 @@ if ($null -eq $refreshResponse) {
     Write-Host "  FAIL refresh returned no response"
     $script:fail++
 } else {
-    Assert-NotEmpty "new accessToken present"  $refreshResponse.tokens.accessToken
-    Assert-NotEmpty "new refreshToken present" $refreshResponse.tokens.refreshToken
-    $accessToken2  = $refreshResponse.tokens.accessToken
-    $refreshToken2 = $refreshResponse.tokens.refreshToken
+    Assert-NotEmpty "new accessToken present"  $refreshResponse.accessToken
+    Assert-NotEmpty "new refreshToken present" $refreshResponse.refreshToken
+    $accessToken2  = $refreshResponse.accessToken
+    $refreshToken2 = $refreshResponse.refreshToken
 
     # -------------------------------------------------------------------------
     # 6. Original refresh token rejected after rotation

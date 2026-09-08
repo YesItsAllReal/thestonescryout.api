@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { CognitoIdentityProviderClient } from "@aws-sdk/client-cognito-identity-provider";
+import {
+  GetTokensFromRefreshTokenCommand,
+  RevokeTokenCommand,
+  type CognitoIdentityProviderClient,
+} from "@aws-sdk/client-cognito-identity-provider";
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { createAwsIdentityServices } from "../src/app/aws-identity-services.js";
 import { DynamoRefreshRegistry } from "../src/auth/dynamo-refresh-registry.js";
@@ -67,7 +71,7 @@ test("Issue 2: refresh compensation gateway is wired to the registry", () => {
   // CognitoSessionProvider and DynamoRefreshRegistry so compensation runs
   // in production, not only in direct unit tests.
   let revokedToken: string | undefined;
-  const stubbedCognito = {
+  const stubbedCognito: { send: (cmd: unknown) => Promise<unknown> } = {
     async send() { return {}; },
   };
 
@@ -96,16 +100,6 @@ test("Issue 2: refresh compensation gateway is wired to the registry", () => {
     },
   };
 
-  // Patch fetch to capture the revoke call.
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (_url: unknown, options: unknown) => {
-    const body = JSON.parse((options as { body: string }).body) as Record<string, unknown>;
-    if (typeof body["Token"] === "string") {
-      revokedToken = body["Token"] as string;
-    }
-    return { ok: true, json: async () => ({}) } as Response;
-  };
-
   const services = createAwsIdentityServices({
     documentClient: stubbedDynamo as unknown as DynamoDBDocumentClient,
     cognitoClient:  stubbedCognito as unknown as CognitoIdentityProviderClient,
@@ -129,26 +123,16 @@ test("Issue 2: refresh compensation gateway is wired to the registry", () => {
   const rawRefreshToken = "raw-refresh-token-value-for-wiring-test-0001";
   const replacementRaw  = "replacement-raw-token-for-wiring-test-0002";
 
-  // Stub the gateway's refreshWithRotation to return a known replacement token.
-  // We do this by patching fetch to return a token response for GetTokensFromRefreshToken.
-  globalThis.fetch = async (_url: unknown, options: unknown) => {
-    const body = JSON.parse((options as { body: string }).body) as Record<string, unknown>;
-    const target = (options as { headers: Record<string, string> }).headers["X-Amz-Target"] ?? "";
-    if (target.includes("GetTokensFromRefreshToken")) {
-      return {
-        ok: true,
-        json: async () => ({
-          AccessToken:  "access-token-value-00000001",
-          RefreshToken: replacementRaw,
-          ExpiresIn:    3600,
-        }),
-      } as Response;
+  // Stub cognitoClient.send to intercept GetTokensFromRefreshToken and RevokeToken.
+  stubbedCognito.send = async (cmd: unknown) => {
+    if (cmd instanceof GetTokensFromRefreshTokenCommand) {
+      return { AuthenticationResult: { AccessToken: "access-token-value-00000001", RefreshToken: replacementRaw, ExpiresIn: 3600 } };
     }
-    if (target.includes("RevokeToken") && typeof body["Token"] === "string") {
-      revokedToken = body["Token"] as string;
-      return { ok: true, json: async () => ({}) } as Response;
+    if (cmd instanceof RevokeTokenCommand) {
+      revokedToken = cmd.input.Token;
+      return {};
     }
-    return { ok: true, json: async () => ({}) } as Response;
+    return {};
   };
 
   const refreshPromise = services.sessionLifecycle
@@ -156,7 +140,6 @@ test("Issue 2: refresh compensation gateway is wired to the registry", () => {
     .catch(() => { /* DynamoDB error expected */ });
 
   return refreshPromise.then(() => {
-    globalThis.fetch = originalFetch;
     assert.equal(revokedToken, replacementRaw,
       "compensation gateway must revoke the replacement token when DynamoDB rotation fails");
   });

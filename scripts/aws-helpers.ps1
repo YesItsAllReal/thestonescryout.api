@@ -130,8 +130,8 @@ function Invoke-HttpRequest {
     )
     $params = @{ Uri = $Uri; Method = $Method; UseBasicParsing = $true }
     if ($Headers.Count -gt 0) { $params.Headers = $Headers }
-    if ($null -ne $Body)        { $params.Body = $Body }
-    if ($null -ne $ContentType) { $params.ContentType = $ContentType }
+    if ($null -ne $Body -and $Body -ne '')        { $params.Body = $Body }
+    if ($null -ne $ContentType -and $ContentType -ne '') { $params.ContentType = $ContentType }
     try {
         $r = Invoke-WebRequest @params
         return [PSCustomObject]@{ StatusCode = [int]$r.StatusCode; Content = $r.Content }
