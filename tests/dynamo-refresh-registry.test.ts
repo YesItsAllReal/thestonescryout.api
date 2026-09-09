@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 
-import { GetCommand, TransactWriteCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 
 import { DynamoRefreshRegistry } from "../src/auth/dynamo-refresh-registry.js";
@@ -261,23 +261,50 @@ test("assertOwnedBy rejects a credential belonging to a different player", async
 // Idempotent revocation
 // ---------------------------------------------------------------------------
 
-test("markRevoked uses UpdateCommand and is idempotent when record is missing", async () => {
-  const notFound = new Error("not found");
-  notFound.name = "ConditionalCheckFailedException";
-  const client = new ScriptedClient([notFound]);
+test("markRevoked is idempotent when a cancelled transaction finds no credential", async () => {
+  const conflict = new Error("cancelled");
+  conflict.name = "TransactionCanceledException";
+  const client = new ScriptedClient([conflict, { Item: undefined }]);
   await assert.doesNotReject(
-    registry(client).markRevoked({ credentialHash: hash1, now }),
+    registry(client).markRevoked({ credentialHash: hash1, playerId, now }),
   );
-  assert.ok(client.commands[0] instanceof UpdateCommand);
+  assert.ok(client.commands[0] instanceof TransactWriteCommand);
+  assert.ok(client.commands[1] instanceof GetCommand);
 });
 
-test("markRevoked sets status to revoked", async () => {
+test("markRevoked atomically revokes the owned credential and appends a privacy-safe audit event", async () => {
   const client = new ScriptedClient([{}]);
-  await registry(client).markRevoked({ credentialHash: hash1, now });
+  await registry(client).markRevoked({ credentialHash: hash1, playerId, now });
 
-  const cmd = client.commands[0] as UpdateCommand;
-  assert.ok(cmd.input.UpdateExpression?.includes(":revoked"));
-  assert.ok(cmd.input.ConditionExpression?.includes("attribute_exists"));
+  const cmd = client.commands[0] as TransactWriteCommand;
+  const items = cmd.input.TransactItems;
+  assert.equal(items?.length, 2);
+  assert.ok(items?.[0]?.Update?.UpdateExpression?.includes(":revoked"));
+  assert.ok(items?.[0]?.Update?.ConditionExpression?.includes("playerId = :playerId"));
+  assert.equal(items?.[1]?.Put?.Item?.["action"], "SESSION_CREDENTIAL_REVOKED");
+  assert.equal(items?.[1]?.Put?.Item?.["playerId"], playerId);
+  assert.equal(JSON.stringify(items?.[1]?.Put?.Item).includes(rawToken), false);
+  assert.equal(JSON.stringify(items?.[1]?.Put?.Item).includes(hash1), false);
+  assert.match(String(items?.[1]?.Put?.Item?.["auditEventId"]), /^[a-f0-9]{64}$/);
+});
+
+test("markRevoked accepts a concurrent winner only for the same player's revoked record", async () => {
+  const conflict = new Error("cancelled");
+  conflict.name = "TransactionCanceledException";
+  const client = new ScriptedClient([conflict, activeRecord({ status: "revoked" })]);
+  await assert.doesNotReject(
+    registry(client).markRevoked({ credentialHash: hash1, playerId, now }),
+  );
+});
+
+test("markRevoked fails closed when a revocation conflict belongs to another player", async () => {
+  const conflict = new Error("cancelled");
+  conflict.name = "TransactionCanceledException";
+  const client = new ScriptedClient([conflict, activeRecord({ status: "revoked", playerId: otherPlayerId })]);
+  await assert.rejects(
+    registry(client).markRevoked({ credentialHash: hash1, playerId, now }),
+    RefreshCredentialRejectedError,
+  );
 });
 
 // ---------------------------------------------------------------------------

@@ -86,7 +86,7 @@ test("revocation verifies hashed credential ownership before calling Cognito", a
 
   assert.deepEqual(registry.ownership, { credentialHash: hash(firstRefresh), playerId, now });
   assert.equal(revokedToken, firstRefresh);
-  assert.deepEqual(registry.revoked, { credentialHash: hash(firstRefresh), now });
+  assert.deepEqual(registry.revoked, { credentialHash: hash(firstRefresh), playerId, now });
 });
 
 test("revocation rejects a credential belonging to another player", async () => {

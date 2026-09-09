@@ -203,6 +203,20 @@ provisioned resources section below for identifiers.
   all 17 smoke tests. See
   `docs/amazon-q/checkpoint-6-deployment-handoff.md` for the full deployment
   record, discovered bugs, and live AWS state.
+- Explicit session revocation now has a local durable-audit implementation:
+  the owned refresh-credential transition and one immutable
+  `SESSION_CREDENTIAL_REVOKED` event are committed in the same DynamoDB
+  transaction. Concurrent/idempotent retries accept only the same player's
+  well-formed revoked record. Audit records contain neither raw credentials nor
+  credential hashes. This change is local only until a separately approved API
+  Lambda code deployment.
+- A local `CognitoPlayerSessionRevoker` implements provider-wide account
+  session invalidation with `AdminUserGlobalSignOut`. It validates the
+  server-owned UUID username, treats a missing shadow user as idempotently
+  revoked, and maps every other provider failure to an opaque error. It is not
+  wired into the Lambda yet: deployment requires explicit approval to add
+  `cognito-idp:AdminUserGlobalSignOut` to the API role and completion of the
+  deletion reauthentication boundary.
 - SCO_APPLE_AUDIENCE is optional at Lambda startup. When absent, Apple
   sign-in routes return 503 and all other routes function normally. Apple
   deployment remains blocked until com.itsallrealministries.stonescryout is

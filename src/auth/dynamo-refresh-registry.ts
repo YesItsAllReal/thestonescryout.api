@@ -1,7 +1,8 @@
+import { createHash } from "node:crypto";
+
 import {
   GetCommand,
   TransactWriteCommand,
-  UpdateCommand,
   type DynamoDBDocumentClient,
 } from "@aws-sdk/lib-dynamodb";
 
@@ -170,21 +171,60 @@ export class DynamoRefreshRegistry implements RefreshCredentialRegistry {
 
   public async markRevoked(input: {
     readonly credentialHash: string;
+    readonly playerId: string;
     readonly now: Date;
   }): Promise<void> {
     assertHash(input.credentialHash);
     try {
-      await this.client.send(new UpdateCommand({
-        TableName: this.tableName,
-        Key: { pk: pk(input.credentialHash), sk: "CREDENTIAL" },
-        UpdateExpression: "SET #status = :revoked",
-        ConditionExpression: "attribute_exists(pk)",
-        ExpressionAttributeNames: { "#status": "status" },
-        ExpressionAttributeValues: { ":revoked": "revoked" },
+      await this.client.send(new TransactWriteCommand({
+        TransactItems: [
+          {
+            Update: {
+              TableName: this.tableName,
+              Key: { pk: pk(input.credentialHash), sk: "CREDENTIAL" },
+              UpdateExpression: "SET #status = :revoked, revokedAt = :revokedAt",
+              ConditionExpression:
+                "#status = :active" +
+                " AND entityType = :entityType" +
+                " AND recordVersion = :recordVersion" +
+                " AND playerId = :playerId",
+              ExpressionAttributeNames: { "#status": "status" },
+              ExpressionAttributeValues: {
+                ":revoked": "revoked",
+                ":revokedAt": input.now.toISOString(),
+                ":active": "active",
+                ":entityType": ENTITY_TYPE,
+                ":recordVersion": RECORD_VERSION,
+                ":playerId": input.playerId,
+              },
+            },
+          },
+          {
+            Put: {
+              TableName: this.tableName,
+              Item: sessionRevocationAuditItem(input),
+              ConditionExpression: "attribute_not_exists(pk) AND attribute_not_exists(sk)",
+            },
+          },
+        ],
       }));
     } catch (error) {
-      if (isConditionalConflict(error)) return;
-      throw error;
+      if (!isTransactionConflict(error)) throw error;
+      // A concurrent/idempotent caller may already have revoked this record.
+      // Read strongly and accept only the exact, well-formed terminal state.
+      const result = await this.client.send(new GetCommand({
+        TableName: this.tableName,
+        Key: { pk: pk(input.credentialHash), sk: "CREDENTIAL" },
+        ConsistentRead: true,
+      }));
+      if (result.Item === undefined) return;
+      if (result.Item["entityType"] !== ENTITY_TYPE ||
+          result.Item["recordVersion"] !== RECORD_VERSION ||
+          result.Item["playerId"] !== input.playerId ||
+          result.Item["status"] !== "revoked") {
+        throw new RefreshCredentialRejectedError("refresh credential revocation conflict could not be resolved");
+      }
+      return;
     }
   }
 
@@ -266,6 +306,31 @@ export class DynamoRefreshRegistry implements RefreshCredentialRegistry {
 
 function pk(credentialHash: string): string {
   return `REFRESH#${credentialHash}`;
+}
+
+function sessionRevocationAuditItem(input: {
+  readonly credentialHash: string;
+  readonly playerId: string;
+  readonly now: Date;
+}): Record<string, unknown> {
+  const createdAt = input.now.toISOString();
+  const eventId = createAuditId(input.credentialHash);
+  return {
+    pk: `PLAYER#${input.playerId}`,
+    sk: `AUDIT#${createdAt}#${eventId}`,
+    entityType: "AuditEvent",
+    recordVersion: 1,
+    auditEventId: eventId,
+    playerId: input.playerId,
+    action: "SESSION_CREDENTIAL_REVOKED",
+    createdAt,
+  };
+}
+
+function createAuditId(credentialHash: string): string {
+  return createHash("sha256")
+    .update(`session-revoked:${credentialHash}`, "utf8")
+    .digest("hex");
 }
 
 function assertHash(value: string): void {

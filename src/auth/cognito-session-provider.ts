@@ -44,6 +44,7 @@ export interface RefreshCredentialRegistry {
   }): Promise<void>;
   markRevoked(input: {
     readonly credentialHash: string;
+    readonly playerId: string;
     readonly now: Date;
   }): Promise<void>;
 }
@@ -124,7 +125,11 @@ export class CognitoSessionProvider implements SessionTokenIssuer, SessionLifecy
       // Provider revocation is idempotent when Cognito reports an already-invalid token.
       if (!(error instanceof CognitoSessionRejectedError)) throw error;
     }
-    await this.registry.markRevoked({ credentialHash, now: input.now });
+    await this.registry.markRevoked({
+      credentialHash,
+      playerId: input.playerId,
+      now: input.now,
+    });
   }
 }
 
