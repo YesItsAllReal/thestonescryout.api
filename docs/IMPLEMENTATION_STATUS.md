@@ -217,6 +217,12 @@ provisioned resources section below for identifiers.
   wired into the Lambda yet: deployment requires explicit approval to add
   `cognito-idp:AdminUserGlobalSignOut` to the API role and completion of the
   deletion reauthentication boundary.
+- A local Apple account-deletion authorizer now requires a fresh verified Apple
+  assertion and a strongly consistent hashed provider-mapping lookup that must
+  resolve to the authenticated player. Guest sessions, missing proofs,
+  cross-player identities, malformed mappings, and provider/store failures all
+  fail through the same privacy-safe authorization boundary. It remains
+  unwired while `SCO_APPLE_AUDIENCE` is intentionally absent.
 - SCO_APPLE_AUDIENCE is optional at Lambda startup. When absent, Apple
   sign-in routes return 503 and all other routes function normally. Apple
   deployment remains blocked until com.itsallrealministries.stonescryout is
