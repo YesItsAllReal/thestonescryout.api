@@ -223,6 +223,16 @@ provisioned resources section below for identifiers.
   cross-player identities, malformed mappings, and provider/store failures all
   fail through the same privacy-safe authorization boundary. It remains
   unwired while `SCO_APPLE_AUDIENCE` is intentionally absent.
+- The DynamoDB economy implementation now has a pure, offline-tested atomic
+  transaction builder. A balance compare-and-set, one immutable ledger item per
+  normalized resource mutation, optional verified-grant claim, and hashed
+  idempotency receipt share one transaction. Raw idempotency keys and request
+  fingerprints are never persisted. The concrete repository adds strongly
+  consistent replay, verified-grant, and balance reads; explicit stale-revision
+  results; conditional-write recovery; and fail-closed record/version parsing.
+  It is available from the AWS persistence factory without eager network calls.
+  Economy routes stay disabled until server-owned spend rules and reward
+  verifiers are implemented and deployment is separately approved.
 - SCO_APPLE_AUDIENCE is optional at Lambda startup. When absent, Apple
   sign-in routes return 503 and all other routes function normally. Apple
   deployment remains blocked until com.itsallrealministries.stonescryout is

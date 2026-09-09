@@ -5,6 +5,7 @@ import { DynamoDbAppleSignInRepository } from "../accounts/dynamodb-apple-sign-i
 import { DynamoDbGuestPlayerRepository,type GuestStartingBalance } from "../accounts/dynamodb-guest-player-repository.js";
 import type { AppleAccountRepository } from "../accounts/apple-account-service.js";
 import { DynamoDbSaveRepository } from "../saves/dynamodb-save-repository.js";
+import { DynamoDbEconomyRepository } from "../economy/dynamodb-economy-repository.js";
 import { DynamoDbOfflineSyncRepository } from "../sync/dynamodb-offline-sync-repository.js";
 
 export interface AwsPersistenceConfiguration {readonly playerTableName:string;readonly guestStartingBalance:GuestStartingBalance}
@@ -26,5 +27,6 @@ export function createAwsPersistence(input:{readonly documentClient:DynamoDBDocu
     appleAccount,
     save:new DynamoDbSaveRepository(client,configuration.playerTableName),
     offlineSync:new DynamoDbOfflineSyncRepository(client,configuration.playerTableName),
+    economy:new DynamoDbEconomyRepository(client,configuration.playerTableName),
   };
 }
