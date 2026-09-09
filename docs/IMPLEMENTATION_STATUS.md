@@ -79,6 +79,12 @@ provisioned resources section below for identifiers.
   claims, recovers concurrent winners, and retries one unrelated balance race.
   Notification and rewarded-ad methods remain explicitly fail-closed until their
   own atomic adapters are implemented.
+- A pure DynamoDB rewarded-ad transaction builder now atomically claims the
+  verified provider event, conditionally updates the authoritative balance,
+  appends immutable `AD_REWARD` ledger entries, and stores a hashed idempotent
+  result. It rejects cross-player completions, repeated resource mutations, and
+  unsafe key/value shapes before constructing a write. Provider payloads never
+  enter persistence, and the ad route remains disabled.
 - Public content catalog and remote-configuration services depend on repository,
   detached-signature verifier, and HTTPS URL-policy ports rather than S3,
   CloudFront, or key-service types. No bucket, distribution, hostname, or key ID
