@@ -42,8 +42,9 @@ function transactionItem(overrides: Record<string, unknown> = {}): Record<string
     entityType: "PurchaseTransaction", recordVersion: 1, playerId,
     transactionId: input.transaction.transactionId,
     originalTransactionId: input.transaction.originalTransactionId,
-    productId: input.transaction.productId, environment: "sandbox",
-    purchasedAt: input.transaction.purchasedAt, state: "granted", result: storedResult,
+    productId: input.transaction.productId, productKind: "consumable", environment: "sandbox",
+    purchasedAt: input.transaction.purchasedAt, stateEffectiveAt: input.transaction.purchasedAt,
+    state: "granted", result: storedResult,
     ...overrides,
   };
 }

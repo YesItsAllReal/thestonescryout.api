@@ -61,6 +61,12 @@ provisioned resources section below for identifiers.
 - Signed App Store notification verification is isolated behind a provider port.
   Notification IDs are globally idempotent, and verified refund/revocation events
   update known non-consumable entitlement state without trusting request fields.
+- Pure DynamoDB notification transaction builders now durably claim every
+  environment-scoped notification ID. Known purchases atomically transition the
+  exact transaction and, for non-consumables, its exact entitlement; unknown
+  transactions are recorded as ignored. Consumable notifications record provider
+  state but intentionally create no balance or ledger debit pending an approved
+  clawback/debt policy. Concrete repository execution remains fail-closed.
 - Rewarded-ad completion requires provider verification plus exact player and
   preissued claim binding. Provider event IDs are globally unique, and server
   reward configuration—not the client label—determines the positive grant.

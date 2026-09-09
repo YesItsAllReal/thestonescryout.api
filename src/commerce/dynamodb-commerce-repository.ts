@@ -184,11 +184,13 @@ export class DynamoDbCommerceRepository implements CommerceRepository {
     const item = response.Item;
     if (item.entityType !== "PurchaseTransaction" || item.recordVersion !== 1 ||
         item.transactionId !== input.transaction.transactionId || item.originalTransactionId !== input.transaction.originalTransactionId ||
-        item.environment !== input.transaction.environment || item.purchasedAt !== input.transaction.purchasedAt || item.state !== "granted" ||
-        typeof item.playerId !== "string" || typeof item.productId !== "string") {
+        item.environment !== input.transaction.environment || item.purchasedAt !== input.transaction.purchasedAt ||
+        item.stateEffectiveAt !== input.transaction.purchasedAt || item.state !== "granted" ||
+        typeof item.playerId !== "string" || typeof item.productId !== "string" ||
+        (item.productKind !== "consumable" && item.productKind !== "nonConsumable")) {
       throw new Error("stored purchase transaction is invalid");
     }
-    if (item.playerId !== input.playerId || item.productId !== input.transaction.productId) {
+    if (item.playerId !== input.playerId || item.productId !== input.transaction.productId || item.productKind !== input.product.kind) {
       throw new CommerceOwnershipError("transaction was already claimed by another purchase");
     }
     const result = readResult(item.result, input.playerId, sha256(input.idempotencyKey));

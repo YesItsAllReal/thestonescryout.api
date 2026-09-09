@@ -66,7 +66,9 @@ export function buildPurchaseTransaction(input: {
       transactionId: operation.transaction.transactionId,
       originalTransactionId: operation.transaction.originalTransactionId,
       productId: operation.transaction.productId, environment: operation.transaction.environment,
-      purchasedAt: operation.transaction.purchasedAt, state: "granted", result: publicResult, createdAt,
+      productKind: operation.product.kind, purchasedAt: operation.transaction.purchasedAt,
+      state: "granted", stateEffectiveAt: operation.transaction.purchasedAt,
+      result: publicResult, createdAt,
     }, ConditionExpression: "attribute_not_exists(pk) AND attribute_not_exists(sk)" },
   }];
 
@@ -96,7 +98,8 @@ export function buildPurchaseTransaction(input: {
   if (entitlement !== undefined) items.push({ Put: { TableName: input.tableName, Item: {
     pk: playerKey, sk: `ENTITLEMENT#${entitlement.productId}`,
     entityType: "Entitlement", recordVersion: 1, playerId: operation.playerId, ...entitlement,
-    transactionId: operation.transaction.transactionId, updatedAt: createdAt,
+    transactionId: operation.transaction.transactionId,
+    stateEffectiveAt: operation.transaction.purchasedAt, updatedAt: createdAt,
   }, ConditionExpression: "attribute_not_exists(pk) AND attribute_not_exists(sk)" } });
   items.push({ Put: { TableName: input.tableName, Item: {
     pk: `IDEMPOTENCY#PURCHASE#${operation.playerId}#${idempotencyHash}`, sk: "RESULT",
