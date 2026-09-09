@@ -44,9 +44,9 @@ was skipped by owner decision; ItsAllRealAdmin was used directly for all phases.
   src/auth/cognito-gateway-adapter.ts, tests/aws-identity-services.test.ts,
   tests/cognito-gateway-adapter.test.ts, docs/IMPLEMENTATION_STATUS.md
 - Post-deployment revocation hardening (cognito-gateway-adapter.ts revoke() fix)
-  is local only — not yet redeployed to Lambda. The working tree must be
-  committed locally before any corrective redeployment is approved.
-- Source commit 510f857 predates the deployment-time fixes.
+  was deployed to sco-dev-api from commit aea102f on 2026-09-08.
+- The live API Lambda code and the committed source are synchronized at
+  commit aea102f. The corrective deployment passed all 17 smoke tests.
 
 ## Authorization rules — read carefully before every session
 

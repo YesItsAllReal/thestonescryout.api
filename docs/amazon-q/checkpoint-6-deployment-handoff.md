@@ -135,7 +135,7 @@ at the top level (not wrapped in a `tokens` object), matching the OpenAPI contra
 
 ---
 
-## Post-deployment hardening (applied after smoke tests, same session)
+## Post-deployment hardening and corrective deployment
 
 ### Bug 5 — `cognito-gateway-adapter.ts`: `revoke()` swallowed all errors
 
@@ -194,23 +194,15 @@ that duplicated this coverage were removed.
 - PowerShell tests: **30/30**
 - `npm run bundle`: both artifacts validated
 - `git diff --check`: no whitespace errors (CRLF/LF warnings only)
-- Source commit `510f857` predates all deployment-time fixes. The working tree
-  must be committed locally before any corrective redeployment is approved.
-
-Modified files not yet committed:
-- `scripts/aws-helpers.ps1` — Bug 1 fix (deployment-time; **live**)
-- `scripts/smoke-test.ps1` — Bug 4 fix (deployment-time; **live**)
-- `src/auth/cognito-gateway-adapter.ts` — Bugs 2, 3 fixes (deployment-time; **live**);
-  Bug 5 revocation hardening (post-deployment; **local only, not yet redeployed**)
-- `tests/aws-identity-services.test.ts` — wiring test updated for SDK commands
-- `tests/cognito-gateway-adapter.test.ts` — 19 new tests, 4 names corrected,
-  2 synthetic compensation tests replaced with coverage pointer
-- `docs/IMPLEMENTATION_STATUS.md` — updated to reflect live state
-
-Untracked files:
-- `.amazonq/` — agent rules (intentional, not committed)
-- `docs/adr/API-StonesCryOut.txt` — scratch note, not authoritative (see below)
-- `docs/amazon-q/checkpoint-6-deployment-handoff.md` — this file
+- Source commit `aea102f2ad3d1b77b805fa41edc7842173b3c72f` contains
+  deployment-time fixes and Bug 5 revocation hardening.
+- The working tree was clean when the corrective deployment began.
+- `dist-lambda/api.zip` SHA-256:
+  `B238BEBA5B13D47624B5B654CEA2AE9AE710C93843074F72D93A6C93A5CE9701`.
+- The API Lambda code-only update completed successfully on 2026-09-08.
+- Post-deployment configuration was unchanged and all 17 smoke tests passed.
+- Smoke fixture cleanup remains separately controlled; the ignored fixture
+  manifest is `rollback/smoke-fixture-20260908193804.json`.
 
 ---
 

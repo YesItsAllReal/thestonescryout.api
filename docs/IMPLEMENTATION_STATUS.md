@@ -197,11 +197,10 @@ provisioned resources section below for identifiers.
   credential registry, and Cognito trigger dispatcher is complete and tested.
   244/244 local tests pass (225 pre-deployment + 19 new focused gateway tests
   added post-deployment). Concrete adapters are deployed to Lambda.
-  Checkpoint 6 deployment is complete. Deployment-time fixes (Bugs 1–4) are
-  live. Post-deployment revocation hardening (Bug 5, revoke() error handling)
-  is local only and awaits a separately approved Lambda redeployment. The
-  working tree must be committed locally before that redeployment. Source
-  commit 510f857 predates all deployment-time fixes. See
+  Checkpoint 6 deployment is complete. Deployment-time fixes (Bugs 1–4) and
+  post-deployment revocation hardening (Bug 5, revoke() error handling) are
+  live. The corrective API code-only deployment used commit aea102f and passed
+  all 17 smoke tests. See
   `docs/amazon-q/checkpoint-6-deployment-handoff.md` for the full deployment
   record, discovered bugs, and live AWS state.
 - SCO_APPLE_AUDIENCE is optional at Lambda startup. When absent, Apple
