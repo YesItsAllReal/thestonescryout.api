@@ -240,6 +240,11 @@ provisioned resources section below for identifiers.
   represented as 50 coins + 20 energy for a daily gift and rewarded choices of
   100 coins or 20 energy; provider eligibility/deduplication remains behind an
   injected verifier. No client-supplied amount can enter the ledger.
+- `GET /v1/economy` is locally wired to the concrete, strongly consistent
+  DynamoDB balance reader behind bearer authentication. Its sibling mutation
+  routes remain explicit 503 responses, and injected mutation policies fail
+  closed even if called accidentally. This read route is not live until a
+  separately approved API Lambda code deployment.
 - SCO_APPLE_AUDIENCE is optional at Lambda startup. When absent, Apple
   sign-in routes return 503 and all other routes function normally. Apple
   deployment remains blocked until com.itsallrealministries.stonescryout is

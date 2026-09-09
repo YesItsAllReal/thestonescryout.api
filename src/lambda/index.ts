@@ -14,6 +14,8 @@ import { createAppleSignInHandler, createAppleLinkHandler } from "../http/apple-
 import { createGetAccountHandler } from "../http/account-handlers.js";
 import { createGetSaveHandler, createPutSaveHandler } from "../http/save-handlers.js";
 import { createRefreshSessionHandler, createRevokeSessionHandler } from "../http/session-handlers.js";
+import { createGetEconomyHandler } from "../http/economy-handlers.js";
+import { EconomyService } from "../economy/economy-service.js";
 import { authenticateRequest, limitPublicRequest, loggedProblem } from "../http/handler-support.js";
 
 // Fail closed: if any required environment variable is missing or invalid,
@@ -76,6 +78,15 @@ const authDeps: AuthenticatedHandlerDependencies = {
   tokenVerifier: identity.tokenVerifier,
 };
 
+// Enable only authoritative balance reads. Mutation dependencies deliberately
+// fail closed until approved spend and reward policies are configured.
+const economy = new EconomyService(
+  identity.persistence.economy,
+  { resolve: async () => { throw new Error("spend rules are not configured"); } },
+  { verify: async () => { throw new Error("reward verification is not configured"); } },
+  now,
+);
+
 // Issue 7: 503 handlers use the shared privacy-aware helpers so they apply
 // rate limiting, require authentication where appropriate, and return the
 // documented correlation-ID shape. Unauthenticated callers cannot reach
@@ -97,9 +108,8 @@ function authenticatedNotAvailable(route: string): HttpHandler {
   };
 }
 
-// Routes NOT included in this deployment slice:
+// Routes intentionally kept unavailable in this deployment slice:
 //   DELETE /v1/account          — stub revoker not yet implemented
-//   GET    /v1/economy          — DynamoDB economy adapter not yet implemented
 //   POST   /v1/spend            — DynamoDB economy adapter not yet implemented
 //   POST   /v1/rewards/claim    — DynamoDB economy adapter not yet implemented
 //   GET    /v1/entitlements     — DynamoDB entitlement adapter not yet implemented
@@ -128,10 +138,10 @@ const appHandler = createApiRouter({
     { method: "GET",    path: "/v1/account",         handler: createGetAccountHandler(identity.account, authDeps) },
     { method: "GET",    path: "/v1/save",            handler: createGetSaveHandler(identity.save, authDeps) },
     { method: "PUT",    path: "/v1/save",            handler: createPutSaveHandler(identity.save, authDeps) },
+    { method: "GET",    path: "/v1/economy",         handler: createGetEconomyHandler(economy, authDeps) },
 
     // Not yet deployed — explicit 503 with appropriate access control.
     { method: "DELETE", path: "/v1/account",                 handler: authenticatedNotAvailable("DELETE /v1/account") },
-    { method: "GET",    path: "/v1/economy",                 handler: authenticatedNotAvailable("GET /v1/economy") },
     { method: "POST",   path: "/v1/spend",                   handler: authenticatedNotAvailable("POST /v1/spend") },
     { method: "POST",   path: "/v1/rewards/claim",           handler: authenticatedNotAvailable("POST /v1/rewards/claim") },
     { method: "GET",    path: "/v1/entitlements",            handler: authenticatedNotAvailable("GET /v1/entitlements") },
