@@ -14,8 +14,9 @@ import { createAppleSignInHandler, createAppleLinkHandler } from "../http/apple-
 import { createGetAccountHandler } from "../http/account-handlers.js";
 import { createGetSaveHandler, createPutSaveHandler } from "../http/save-handlers.js";
 import { createRefreshSessionHandler, createRevokeSessionHandler } from "../http/session-handlers.js";
-import { createGetEconomyHandler } from "../http/economy-handlers.js";
+import { createGetEconomyHandler, createGetEntitlementsHandler } from "../http/economy-handlers.js";
 import { EconomyService } from "../economy/economy-service.js";
+import { EntitlementService } from "../economy/entitlement-service.js";
 import { authenticateRequest, limitPublicRequest, loggedProblem } from "../http/handler-support.js";
 
 // Fail closed: if any required environment variable is missing or invalid,
@@ -86,6 +87,7 @@ const economy = new EconomyService(
   { verify: async () => { throw new Error("reward verification is not configured"); } },
   now,
 );
+const entitlement = new EntitlementService(identity.persistence.entitlement);
 
 // Issue 7: 503 handlers use the shared privacy-aware helpers so they apply
 // rate limiting, require authentication where appropriate, and return the
@@ -112,7 +114,6 @@ function authenticatedNotAvailable(route: string): HttpHandler {
 //   DELETE /v1/account          — stub revoker not yet implemented
 //   POST   /v1/spend            — DynamoDB economy adapter not yet implemented
 //   POST   /v1/rewards/claim    — DynamoDB economy adapter not yet implemented
-//   GET    /v1/entitlements     — DynamoDB entitlement adapter not yet implemented
 //   POST   /v1/purchases/verify — DynamoDB commerce adapter not yet implemented
 //   POST   /v1/app-store/notifications — DynamoDB commerce adapter not yet implemented
 //   POST   /v1/ads/reward/verify — DynamoDB commerce adapter not yet implemented
@@ -139,12 +140,12 @@ const appHandler = createApiRouter({
     { method: "GET",    path: "/v1/save",            handler: createGetSaveHandler(identity.save, authDeps) },
     { method: "PUT",    path: "/v1/save",            handler: createPutSaveHandler(identity.save, authDeps) },
     { method: "GET",    path: "/v1/economy",         handler: createGetEconomyHandler(economy, authDeps) },
+    { method: "GET",    path: "/v1/entitlements",    handler: createGetEntitlementsHandler(entitlement, authDeps) },
 
     // Not yet deployed — explicit 503 with appropriate access control.
     { method: "DELETE", path: "/v1/account",                 handler: authenticatedNotAvailable("DELETE /v1/account") },
     { method: "POST",   path: "/v1/spend",                   handler: authenticatedNotAvailable("POST /v1/spend") },
     { method: "POST",   path: "/v1/rewards/claim",           handler: authenticatedNotAvailable("POST /v1/rewards/claim") },
-    { method: "GET",    path: "/v1/entitlements",            handler: authenticatedNotAvailable("GET /v1/entitlements") },
     { method: "POST",   path: "/v1/purchases/verify",        handler: authenticatedNotAvailable("POST /v1/purchases/verify") },
     { method: "POST",   path: "/v1/app-store/notifications", handler: publicNotAvailable("POST /v1/app-store/notifications") },
     { method: "POST",   path: "/v1/ads/reward/verify",       handler: authenticatedNotAvailable("POST /v1/ads/reward/verify") },

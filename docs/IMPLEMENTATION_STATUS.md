@@ -245,6 +245,12 @@ provisioned resources section below for identifiers.
   routes remain explicit 503 responses, and injected mutation policies fail
   closed even if called accidentally. This read route is not live until a
   separately approved API Lambda code deployment.
+- `GET /v1/entitlements` is locally wired to a paginated, strongly consistent
+  DynamoDB reader behind bearer authentication. It validates every stored key,
+  owner, version, state, environment, and purchase timestamp before returning a
+  deterministic product-ID ordering. Purchase and notification mutation routes
+  remain explicit 503 responses. This read route is not live until a separately
+  approved API Lambda code deployment.
 - SCO_APPLE_AUDIENCE is optional at Lambda startup. When absent, Apple
   sign-in routes return 503 and all other routes function normally. Apple
   deployment remains blocked until com.itsallrealministries.stonescryout is
