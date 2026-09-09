@@ -8,6 +8,7 @@ import { DynamoDbSaveRepository } from "../saves/dynamodb-save-repository.js";
 import { DynamoDbEconomyRepository } from "../economy/dynamodb-economy-repository.js";
 import { DynamoDbEntitlementRepository } from "../economy/dynamodb-entitlement-repository.js";
 import { DynamoDbOfflineSyncRepository } from "../sync/dynamodb-offline-sync-repository.js";
+import { DynamoDbCommerceRepository } from "../commerce/dynamodb-commerce-repository.js";
 
 export interface AwsPersistenceConfiguration {readonly playerTableName:string;readonly guestStartingBalance:GuestStartingBalance}
 export class AccountLinkReconciliationNotConfiguredError extends Error {}
@@ -30,5 +31,6 @@ export function createAwsPersistence(input:{readonly documentClient:DynamoDBDocu
     offlineSync:new DynamoDbOfflineSyncRepository(client,configuration.playerTableName),
     economy:new DynamoDbEconomyRepository(client,configuration.playerTableName),
     entitlement:new DynamoDbEntitlementRepository(client,configuration.playerTableName),
+    commerce:new DynamoDbCommerceRepository(client,configuration.playerTableName),
   };
 }

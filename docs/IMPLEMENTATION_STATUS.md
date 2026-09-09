@@ -208,7 +208,8 @@ provisioned resources section below for identifiers.
   save/economy/entitlement reconciliation boundary.
 - CI runs OpenAPI lint, strict TypeScript compilation, and Node tests.
 - A local AWS persistence composition factory now assembles the concrete guest,
-  account, Apple sign-in/link, save, and offline-sync DynamoDB adapters without
+  account, Apple sign-in/link, save, offline-sync, economy, entitlement, and
+  commerce DynamoDB adapters without
   network access at construction. Explicit account-link reconciliation resolution remains
   fail-closed until its full reconciliation transaction is implemented.
 - A local AWS identity-service composition factory now combines those concrete
