@@ -66,7 +66,10 @@ provisioned resources section below for identifiers.
   exact transaction and, for non-consumables, its exact entitlement; unknown
   transactions are recorded as ignored. Consumable notifications record provider
   state but intentionally create no balance or ledger debit pending an approved
-  clawback/debt policy. Concrete repository execution remains fail-closed.
+  clawback/debt policy. The concrete DynamoDB repository now performs strong
+  notification, transaction, and entitlement reads; maps durable replays to
+  duplicate results; and retries one concurrent state transition. The HTTP route
+  remains disabled pending an Apple notification verifier and deployment approval.
 - Rewarded-ad completion requires provider verification plus exact player and
   preissued claim binding. Provider event IDs are globally unique, and server
   reward configuration—not the client label—determines the positive grant.

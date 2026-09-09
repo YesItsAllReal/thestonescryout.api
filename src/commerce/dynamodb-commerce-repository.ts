@@ -6,14 +6,17 @@ import {
 } from "./commerce-service.js";
 import { buildPurchaseTransaction } from "./dynamodb-purchase-transaction.js";
 import { buildAdRewardTransaction } from "./dynamodb-ad-reward-transaction.js";
+import {
+  buildIgnoredNotificationTransaction, buildKnownNotificationTransaction,
+  type StoredEntitlementForNotification, type StoredPurchaseForNotification,
+} from "./dynamodb-notification-transaction.js";
 import type { EconomyBalance, LedgerEntry } from "../economy/economy-service.js";
 import type { Entitlement } from "../economy/entitlement-service.js";
 
 type Client = Pick<DynamoDBDocumentClient, "send">;
 type Purchase = Parameters<CommerceRepository["processPurchaseAtomically"]>[0];
 type AdReward = Parameters<CommerceRepository["processAdRewardAtomically"]>[0];
-
-export class CommerceOperationNotConfiguredError extends Error {}
+type Notification = Parameters<CommerceRepository["processNotificationAtomically"]>[0];
 
 export class DynamoDbCommerceRepository implements CommerceRepository {
   public constructor(
@@ -56,9 +59,91 @@ export class DynamoDbCommerceRepository implements CommerceRepository {
   }
 
   public async processNotificationAtomically(
-    _input: Parameters<CommerceRepository["processNotificationAtomically"]>[0],
+    input: Notification,
   ): Promise<CommerceNotificationResult> {
-    throw new CommerceOperationNotConfiguredError("DynamoDB notification processing is not configured");
+    const replay = await this.readNotificationReplay(input);
+    if (replay !== undefined) return { ...replay, status: "duplicate" };
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const transaction = await this.readNotificationTransaction(input);
+      const built = transaction === undefined
+        ? buildIgnoredNotificationTransaction({ tableName: this.tableName, operation: input })
+        : buildKnownNotificationTransaction({
+            tableName: this.tableName, operation: input, transaction,
+            ...(transaction.productKind === "nonConsumable"
+              ? { entitlement: await this.readNotificationEntitlement(transaction) }
+              : {}),
+          });
+      try {
+        await this.client.send(built.command);
+        return built.result;
+      } catch (error: unknown) {
+        if (!named(error, "TransactionCanceledException")) throw error;
+        const winner = await this.readNotificationReplay(input);
+        if (winner !== undefined) return { ...winner, status: "duplicate" };
+        if (attempt === 1) throw new Error("notification transaction was cancelled without a durable winner");
+      }
+    }
+    throw new Error("notification transaction retry was exhausted");
+  }
+
+  private async readNotificationReplay(input: Notification): Promise<CommerceNotificationResult | undefined> {
+    const { notification } = input;
+    const response = await this.client.send(new GetCommand({
+      TableName: this.tableName,
+      Key: { pk: `NOTIFICATION#${notification.environment}#${notification.notificationId}`, sk: "RESULT" },
+      ConsistentRead: true,
+    }));
+    if (response.Item === undefined) return undefined;
+    const item = response.Item;
+    if (item.entityType !== "AppStoreNotification" || item.recordVersion !== 1 || item.status !== "completed" ||
+        item.notificationId !== notification.notificationId || item.notificationType !== notification.notificationType ||
+        item.transactionId !== notification.transactionId || item.productId !== notification.productId ||
+        item.environment !== notification.environment || item.effectiveAt !== notification.effectiveAt) {
+      throw new Error("stored notification replay is invalid");
+    }
+    return readNotificationResult(item.result, notification.notificationType);
+  }
+
+  private async readNotificationTransaction(input: Notification): Promise<StoredPurchaseForNotification | undefined> {
+    const { notification } = input;
+    const response = await this.client.send(new GetCommand({
+      TableName: this.tableName,
+      Key: { pk: `TRANSACTION#${notification.environment}#${notification.transactionId}`, sk: "GRANT" },
+      ConsistentRead: true,
+    }));
+    if (response.Item === undefined) return undefined;
+    const item = response.Item;
+    if (item.entityType !== "PurchaseTransaction" || item.recordVersion !== 1 ||
+        item.transactionId !== notification.transactionId || item.environment !== notification.environment ||
+        typeof item.playerId !== "string" || typeof item.productId !== "string" ||
+        (item.productKind !== "consumable" && item.productKind !== "nonConsumable") ||
+        (item.state !== "granted" && item.state !== "refunded" && item.state !== "revoked") ||
+        typeof item.stateEffectiveAt !== "string") throw new Error("stored notification purchase is invalid");
+    if (item.productId !== notification.productId) return undefined;
+    return {
+      playerId: item.playerId, transactionId: item.transactionId, productId: item.productId,
+      productKind: item.productKind, environment: item.environment,
+      state: item.state, stateEffectiveAt: item.stateEffectiveAt,
+    };
+  }
+
+  private async readNotificationEntitlement(transaction: StoredPurchaseForNotification): Promise<StoredEntitlementForNotification> {
+    const response = await this.client.send(new GetCommand({
+      TableName: this.tableName,
+      Key: { pk: `PLAYER#${transaction.playerId}`, sk: `ENTITLEMENT#${transaction.productId}` },
+      ConsistentRead: true,
+    }));
+    const item = response.Item;
+    if (item === undefined || item.entityType !== "Entitlement" || item.recordVersion !== 1 ||
+        item.playerId !== transaction.playerId || item.productId !== transaction.productId ||
+        item.sk !== `ENTITLEMENT#${transaction.productId}` ||
+        (item.state !== "active" && item.state !== "refunded" && item.state !== "revoked") ||
+        item.environment !== transaction.environment || typeof item.purchasedAt !== "string" ||
+        typeof item.stateEffectiveAt !== "string") throw new Error("stored notification entitlement is invalid");
+    return {
+      productId: item.productId, state: item.state, environment: item.environment,
+      purchasedAt: item.purchasedAt, stateEffectiveAt: item.stateEffectiveAt,
+    };
   }
 
   public async processAdRewardAtomically(
@@ -271,6 +356,20 @@ function readEntitlement(value: unknown): Entitlement {
     throw new Error("stored purchase entitlement is invalid");
   }
   return { productId: value.productId, state: value.state, purchasedAt: value.purchasedAt, environment: value.environment };
+}
+
+function readNotificationResult(value: unknown, type: "REFUND" | "REVOKE"): CommerceNotificationResult {
+  const expectedState = type === "REFUND" ? "refunded" : "revoked";
+  if (!record(value) || (value.status !== "applied" && value.status !== "ignored") ||
+      value.transactionState !== expectedState) throw new Error("stored notification result is invalid");
+  const entitlement = value.entitlement === undefined ? undefined : readEntitlement(value.entitlement);
+  if (entitlement !== undefined && (value.status !== "applied" || entitlement.state !== expectedState)) {
+    throw new Error("stored notification result is invalid");
+  }
+  return {
+    status: value.status, transactionState: expectedState,
+    ...(entitlement === undefined ? {} : { entitlement }),
+  };
 }
 
 function validateResultForInput(result: CommerceGrantResult, input: Purchase): void {

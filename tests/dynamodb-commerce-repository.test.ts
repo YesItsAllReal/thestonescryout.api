@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import test from "node:test";
 import { GetCommand, PutCommand, TransactWriteCommand, type DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { CommerceIdempotencyConflictError, CommerceOwnershipError } from "../src/commerce/commerce-service.js";
-import { CommerceOperationNotConfiguredError, DynamoDbCommerceRepository } from "../src/commerce/dynamodb-commerce-repository.js";
+import { DynamoDbCommerceRepository } from "../src/commerce/dynamodb-commerce-repository.js";
 
 const playerId = "00000000-0000-4000-8000-000000000701";
 const now = new Date("2026-09-09T16:00:00.000Z");
@@ -120,9 +120,4 @@ test("commerce repository retries once after unrelated balance contention", asyn
   assert.equal(result.balance.coins, 250);
   assert.equal(result.balance.revision, 3);
   assert.equal(client.commands.filter((command) => command instanceof TransactWriteCommand).length, 2);
-});
-
-test("unfinished DynamoDB notification mutations fail closed", async () => {
-  const repository = repo(new Client([]));
-  await assert.rejects(repository.processNotificationAtomically({ notification: {} as never, now }), CommerceOperationNotConfiguredError);
 });
