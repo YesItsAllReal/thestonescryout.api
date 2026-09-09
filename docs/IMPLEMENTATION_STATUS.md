@@ -72,7 +72,13 @@ provisioned resources section below for identifiers.
   balance, appends immutable IAP ledger entries, writes a non-consumable
   entitlement when applicable, and stores the hashed idempotent result. Raw
   idempotency keys and app-account tokens are never persisted. The purchase route
-  remains disabled pending the concrete repository and Apple verifier adapters.
+  remains disabled pending Apple verifier adapters and deployment approval.
+- A concrete DynamoDB commerce repository now executes that purchase transaction
+  behind strong idempotency, transaction-ownership, and balance reads. It records
+  durable receipts for duplicates submitted under new keys, rejects cross-player
+  claims, recovers concurrent winners, and retries one unrelated balance race.
+  Notification and rewarded-ad methods remain explicitly fail-closed until their
+  own atomic adapters are implemented.
 - Public content catalog and remote-configuration services depend on repository,
   detached-signature verifier, and HTTPS URL-policy ports rather than S3,
   CloudFront, or key-service types. No bucket, distribution, hostname, or key ID
