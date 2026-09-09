@@ -67,6 +67,12 @@ provisioned resources section below for identifiers.
 - The commerce repository boundary groups global dedupe, balance/ledger grants,
   and entitlement changes as one atomic operation. In-memory tests cover duplicate
   transactions/events across new idempotency keys and cross-player ownership.
+- A pure DynamoDB purchase transaction builder now atomically claims the
+  environment-scoped StoreKit transaction, conditionally updates an authoritative
+  balance, appends immutable IAP ledger entries, writes a non-consumable
+  entitlement when applicable, and stores the hashed idempotent result. Raw
+  idempotency keys and app-account tokens are never persisted. The purchase route
+  remains disabled pending the concrete repository and Apple verifier adapters.
 - Public content catalog and remote-configuration services depend on repository,
   detached-signature verifier, and HTTPS URL-policy ports rather than S3,
   CloudFront, or key-service types. No bucket, distribution, hostname, or key ID
