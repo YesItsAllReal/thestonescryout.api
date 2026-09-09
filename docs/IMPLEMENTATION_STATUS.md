@@ -99,8 +99,15 @@ provisioned resources section below for identifiers.
   ad route remains disabled pending a provider verifier and deployment approval.
 - Public content catalog and remote-configuration services depend on repository,
   detached-signature verifier, and HTTPS URL-policy ports rather than S3,
-  CloudFront, or key-service types. No bucket, distribution, hostname, or key ID
-  has been selected.
+  CloudFront, or key-service types. The dev bucket and CloudFront distribution
+  are provisioned but not wired to these services; no signing key ID has been
+  approved or configured.
+- Local HTTPS content repositories now resolve deterministic catalog and
+  configuration object paths beneath an injected CDN base URL. They enforce
+  HTTPS-only same-origin requests, reject redirects, bound time and response
+  size, require JSON objects, and map network/status/type/parse failures to the
+  generic content-unavailable boundary without logging response bodies. They are
+  not configured in Lambda or deployed, and no content objects were uploaded.
 - Catalog validation requires unique pack IDs, approved editorial status, valid
   checksums/sizes/build ranges, a matching environment channel, allowlisted CDN
   URLs, and at least one permanent starter pack.
