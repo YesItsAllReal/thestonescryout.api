@@ -121,8 +121,7 @@ test("commerce repository retries once after unrelated balance contention", asyn
   assert.equal(client.commands.filter((command) => command instanceof TransactWriteCommand).length, 2);
 });
 
-test("unfinished DynamoDB commerce mutations fail closed", async () => {
+test("unfinished DynamoDB notification mutations fail closed", async () => {
   const repository = repo(new Client([]));
   await assert.rejects(repository.processNotificationAtomically({ notification: {} as never, now }), CommerceOperationNotConfiguredError);
-  await assert.rejects(repository.processAdRewardAtomically({} as never), CommerceOperationNotConfiguredError);
 });

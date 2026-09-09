@@ -5,11 +5,13 @@ import {
   type CommerceGrantResult, type CommerceNotificationResult, type CommerceRepository,
 } from "./commerce-service.js";
 import { buildPurchaseTransaction } from "./dynamodb-purchase-transaction.js";
+import { buildAdRewardTransaction } from "./dynamodb-ad-reward-transaction.js";
 import type { EconomyBalance, LedgerEntry } from "../economy/economy-service.js";
 import type { Entitlement } from "../economy/entitlement-service.js";
 
 type Client = Pick<DynamoDBDocumentClient, "send">;
 type Purchase = Parameters<CommerceRepository["processPurchaseAtomically"]>[0];
+type AdReward = Parameters<CommerceRepository["processAdRewardAtomically"]>[0];
 
 export class CommerceOperationNotConfiguredError extends Error {}
 
@@ -60,9 +62,95 @@ export class DynamoDbCommerceRepository implements CommerceRepository {
   }
 
   public async processAdRewardAtomically(
-    _input: Parameters<CommerceRepository["processAdRewardAtomically"]>[0],
+    input: AdReward,
   ): Promise<CommerceGrantResult> {
-    throw new CommerceOperationNotConfiguredError("DynamoDB ad reward processing is not configured");
+    const replay = await this.readAdReplay(input);
+    if (replay !== undefined) return replay;
+    const claimed = await this.readAdEvent(input);
+    if (claimed !== undefined) return this.recordAdDuplicate(input, claimed);
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const current = await this.readBalance(input.playerId);
+      const built = buildAdRewardTransaction({
+        tableName: this.tableName, current, operation: input,
+        ledgerEntryIds: input.mutations.map(() => this.createId()),
+        idempotencyTtlSeconds: this.idempotencyTtlSeconds,
+      });
+      try {
+        await this.client.send(built.command);
+        return built.result;
+      } catch (error: unknown) {
+        if (!named(error, "TransactionCanceledException")) throw error;
+        const winner = await this.readAdReplay(input);
+        if (winner !== undefined) return winner;
+        const event = await this.readAdEvent(input);
+        if (event !== undefined) return this.recordAdDuplicate(input, event);
+        if (attempt === 1) throw new Error("ad reward transaction was cancelled without a durable winner");
+      }
+    }
+    throw new Error("ad reward transaction retry was exhausted");
+  }
+
+  private async readAdReplay(input: AdReward): Promise<CommerceGrantResult | undefined> {
+    const operationKey = sha256(input.idempotencyKey);
+    const response = await this.client.send(new GetCommand({
+      TableName: this.tableName,
+      Key: { pk: `IDEMPOTENCY#AD_REWARD#${input.playerId}#${operationKey}`, sk: "RESULT" },
+      ConsistentRead: true,
+    }));
+    if (response.Item === undefined) return undefined;
+    const item = response.Item;
+    if (item.entityType !== "Idempotency" || item.recordVersion !== 1 || item.operation !== "commerce.adReward" ||
+        item.playerId !== input.playerId || item.operationKey !== operationKey || typeof item.requestHash !== "string") {
+      throw new Error("stored ad reward replay is invalid");
+    }
+    if (item.requestHash !== adRequestHash(input)) throw new CommerceIdempotencyConflictError("idempotency key was reused for another ad reward");
+    const result = readResult(item.result, input.playerId, operationKey);
+    validateAdResult(result, input);
+    return result;
+  }
+
+  private async readAdEvent(input: AdReward): Promise<CommerceGrantResult | undefined> {
+    const response = await this.client.send(new GetCommand({
+      TableName: this.tableName,
+      Key: { pk: `AD_EVENT#${input.completion.provider}#${input.completion.providerEventId}`, sk: "GRANT" },
+      ConsistentRead: true,
+    }));
+    if (response.Item === undefined) return undefined;
+    const item = response.Item;
+    if (item.entityType !== "AdCompletion" || item.recordVersion !== 1 || item.state !== "granted" ||
+        item.provider !== input.completion.provider || item.providerEventId !== input.completion.providerEventId ||
+        typeof item.playerId !== "string" || typeof item.claimId !== "string") throw new Error("stored ad completion is invalid");
+    if (item.playerId !== input.playerId || item.claimId !== input.completion.claimId) {
+      throw new CommerceOwnershipError("ad event was already claimed by another reward");
+    }
+    const result = readResult(item.result, input.playerId, sha256(input.idempotencyKey));
+    validateAdResult(result, input);
+    return result;
+  }
+
+  private async recordAdDuplicate(input: AdReward, claimed: CommerceGrantResult): Promise<CommerceGrantResult> {
+    const operationKey = sha256(input.idempotencyKey);
+    const result: CommerceGrantResult = { ...claimed, status: "duplicate", balance: await this.readBalance(input.playerId) };
+    const createdAt = input.now.toISOString();
+    try {
+      await this.client.send(new PutCommand({
+        TableName: this.tableName,
+        Item: {
+          pk: `IDEMPOTENCY#AD_REWARD#${input.playerId}#${operationKey}`, sk: "RESULT",
+          entityType: "Idempotency", recordVersion: 1, operation: "commerce.adReward",
+          playerId: input.playerId, operationKey, requestHash: adRequestHash(input),
+          result: storedResult(result), status: "completed", createdAt,
+          expiresAtEpochSeconds: Math.floor(input.now.getTime() / 1000) + this.idempotencyTtlSeconds,
+          ttl: Math.floor(input.now.getTime() / 1000) + this.idempotencyTtlSeconds,
+        }, ConditionExpression: "attribute_not_exists(pk) AND attribute_not_exists(sk)",
+      }));
+      return result;
+    } catch (error: unknown) {
+      if (!named(error, "ConditionalCheckFailedException")) throw error;
+      const replay = await this.readAdReplay(input);
+      if (replay === undefined) throw new Error("ad reward replay collision has no durable result");
+      return replay;
+    }
   }
 
   private async readReplay(input: Purchase): Promise<CommerceGrantResult | undefined> {
@@ -153,7 +241,7 @@ function readResult(value: unknown, playerId: string, operationKey: string): Com
     if (!record(raw) || typeof raw.ledgerEntryId !== "string" ||
         (raw.resource !== "coins" && raw.resource !== "gems" && raw.resource !== "energy") ||
         typeof raw.delta !== "number" || !Number.isSafeInteger(raw.delta) || raw.delta <= 0 ||
-        raw.reasonCode !== "IAP_GRANT" || typeof raw.sourceReference !== "string" ||
+        (raw.reasonCode !== "IAP_GRANT" && raw.reasonCode !== "AD_REWARD") || typeof raw.sourceReference !== "string" ||
         !amount(raw.balanceAfter) || typeof raw.createdAt !== "string" ||
         !positive(raw.clientBuild) || typeof raw.contentVersion !== "string") throw new Error("stored purchase ledger result is invalid");
     return {
@@ -188,7 +276,8 @@ function validateResultForInput(result: CommerceGrantResult, input: Purchase): v
   for (let index = 0; index < input.product.grants.length; index += 1) {
     const expected = input.product.grants[index]!;
     const actual = result.ledgerEntries[index]!;
-    if (actual.resource !== expected.resource || actual.delta !== expected.delta || actual.sourceReference !== input.transaction.transactionId) {
+    if (actual.resource !== expected.resource || actual.delta !== expected.delta || actual.reasonCode !== "IAP_GRANT" ||
+        actual.sourceReference !== input.transaction.transactionId) {
       throw new Error("stored purchase result does not match product grants");
     }
   }
@@ -203,6 +292,20 @@ function validateResultForInput(result: CommerceGrantResult, input: Purchase): v
   }
 }
 
+function validateAdResult(result: CommerceGrantResult, input: AdReward): void {
+  if (result.entitlement !== undefined || result.ledgerEntries.length !== input.mutations.length) {
+    throw new Error("stored ad reward result does not match configured reward");
+  }
+  for (let index = 0; index < input.mutations.length; index += 1) {
+    const expected = input.mutations[index]!;
+    const actual = result.ledgerEntries[index]!;
+    if (actual.resource !== expected.resource || actual.delta !== expected.delta || actual.reasonCode !== "AD_REWARD" ||
+        actual.sourceReference !== input.completion.providerEventId) {
+      throw new Error("stored ad reward result does not match configured reward");
+    }
+  }
+}
+
 function storedResult(result: CommerceGrantResult): Record<string, unknown> {
   return {
     status: result.status, balance: result.balance,
@@ -211,6 +314,7 @@ function storedResult(result: CommerceGrantResult): Record<string, unknown> {
   };
 }
 function requestHash(input: Purchase): string { return sha256(JSON.stringify([input.transaction.environment, input.transaction.transactionId, input.transaction.productId])); }
+function adRequestHash(input: AdReward): string { return sha256(JSON.stringify([input.completion.provider, input.completion.providerEventId, input.completion.claimId])); }
 function sha256(value: string): string { return createHash("sha256").update(value, "utf8").digest("hex"); }
 function record(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null; }
 function amount(value: unknown): value is number { return typeof value === "number" && Number.isSafeInteger(value) && value >= 0; }
