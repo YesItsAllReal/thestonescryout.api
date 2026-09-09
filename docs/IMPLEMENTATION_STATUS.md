@@ -231,8 +231,15 @@ provisioned resources section below for identifiers.
   consistent replay, verified-grant, and balance reads; explicit stale-revision
   results; conditional-write recovery; and fail-closed record/version parsing.
   It is available from the AWS persistence factory without eager network calls.
-  Economy routes stay disabled until server-owned spend rules and reward
-  verifiers are implemented and deployment is separately approved.
+  Economy routes stay disabled until an approved spend-rule table and concrete
+  reward-evidence verifier are supplied and deployment is separately approved.
+- A trusted economy-policy boundary now resolves spend mutations exclusively
+  from exact server-configured action/reference pairs and rejects every
+  unconfigured price. Verified reward evidence is bound to the requested claim
+  before approved configuration supplies amounts. Product-approved defaults are
+  represented as 50 coins + 20 energy for a daily gift and rewarded choices of
+  100 coins or 20 energy; provider eligibility/deduplication remains behind an
+  injected verifier. No client-supplied amount can enter the ledger.
 - SCO_APPLE_AUDIENCE is optional at Lambda startup. When absent, Apple
   sign-in routes return 503 and all other routes function normally. Apple
   deployment remains blocked until com.itsallrealministries.stonescryout is
