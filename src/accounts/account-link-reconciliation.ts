@@ -13,7 +13,9 @@ export class AccountLinkReconciliationError extends Error {}
 
 export function planAccountLinkReconciliation(state:AccountLinkState, choice:LinkSaveChoice, policy:EconomyReconciliationPolicy):AccountLinkPlan {
   validatePlayers(state);
-  const survivorPlayerId=choice==="preferGuestSave"?state.guest.playerId:state.existing.playerId;
+  // The verified provider mapping already owns the existing account. Save choice
+  // selects only board progress; it must never select identity/economy ownership.
+  const survivorPlayerId=state.existing.playerId;
   const economy=policy.reconcile({survivorPlayerId,guest:state.guestBalance,existing:state.existingBalance,guestLedger:state.guestLedger??[],existingLedger:state.existingLedger??[]});
   for(const value of [economy.balance.coins,economy.balance.gems,economy.balance.energy]) if(!Number.isSafeInteger(value)||value<0) throw new AccountLinkReconciliationError("economy policy produced an invalid balance");
   if(!Number.isSafeInteger(economy.balance.revision)||economy.balance.revision<1||economy.ledgerReasonCodes.length===0) throw new AccountLinkReconciliationError("economy reconciliation must be auditable");
@@ -23,7 +25,7 @@ export function planAccountLinkReconciliation(state:AccountLinkState, choice:Lin
     if(prior!==undefined&&(prior.productId!==item.productId||prior.state!==item.state)) throw new AccountLinkReconciliationError("entitlement transaction state conflicts");
     byTransaction.set(item.transactionId,item);
   }
-  return {survivorPlayerId,retiredPlayerId:survivorPlayerId===state.guest.playerId?state.existing.playerId:state.guest.playerId,
+  return {survivorPlayerId,retiredPlayerId:state.guest.playerId,
     ...(choice==="preferGuestSave"?(state.guestSave?{selectedSave:state.guestSave}:{}):(state.existingSave?{selectedSave:state.existingSave}:{})),economy,
     entitlements:[...byTransaction.values()].sort((a,b)=>a.transactionId.localeCompare(b.transactionId)),unlockIds:[...new Set([...state.guestUnlockIds,...state.existingUnlockIds])].sort()};
 }
