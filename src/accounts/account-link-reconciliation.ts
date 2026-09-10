@@ -2,7 +2,7 @@ import type { LinkSaveChoice } from "./apple-account-service.js";
 import type { PlayerProfile } from "./guest-session-service.js";
 import type { GameSave } from "../saves/save-service.js";
 
-export interface ReconciliationBalance { readonly coins:number; readonly gems:number; readonly energy:number; readonly energyUpdatedAt:string; readonly revision:number }
+export interface ReconciliationBalance { readonly coins:number; readonly gems:number; readonly energy:number; readonly originCoins:number; readonly originGems:number; readonly originEnergy:number; readonly energyUpdatedAt:string; readonly revision:number }
 export interface ReconciliationSave extends GameSave { readonly deviceIdHash:string }
 export interface ReconciliationLedgerEntry { readonly ledgerEntryId:string; readonly resource:"coins"|"gems"|"energy"; readonly delta:number; readonly sourceReference:string; readonly verifiedGrantKey?:string }
 export interface ReconciliationEntitlement { readonly productId:string; readonly transactionId:string; readonly state:"active"|"revoked"|"refunded"; readonly purchasedAt:string; readonly stateEffectiveAt:string; readonly environment:"sandbox"|"production" }
@@ -50,7 +50,7 @@ function reconcileEntitlements(state:AccountLinkState):readonly ReconciliationEn
   }
   return [...byTransaction.values()].sort((a,b)=>a.transactionId.localeCompare(b.transactionId));
 }
-function validateBalance(x:ReconciliationBalance){if(![x.coins,x.gems,x.energy].every(amount)||!instant(x.energyUpdatedAt)||!Number.isSafeInteger(x.revision)||x.revision<1)throw new AccountLinkReconciliationError("economy balance is invalid");}
+function validateBalance(x:ReconciliationBalance){if(![x.coins,x.gems,x.energy,x.originCoins,x.originGems,x.originEnergy].every(amount)||!instant(x.energyUpdatedAt)||!Number.isSafeInteger(x.revision)||x.revision<1)throw new AccountLinkReconciliationError("economy balance is invalid");}
 function validateSave(x:ReconciliationSave){if(x.slot!=="primary"||!Number.isSafeInteger(x.revision)||x.revision<1||!Number.isSafeInteger(x.schemaVersion)||x.schemaVersion<1||!instant(x.updatedAt)||!/^[a-f0-9]{64}$/.test(x.deviceIdHash)||x.snapshot===null||typeof x.snapshot!=="object"||Array.isArray(x.snapshot))throw new AccountLinkReconciliationError("save is invalid");}
 function validateLedger(x:ReconciliationLedgerEntry){if(!safeId(x.ledgerEntryId,128)||!safeId(x.sourceReference,255)||!Number.isSafeInteger(x.delta)||x.delta===0||(x.resource!=="coins"&&x.resource!=="gems"&&x.resource!=="energy")||(x.verifiedGrantKey!==undefined&&!safeId(x.verifiedGrantKey,255)))throw new AccountLinkReconciliationError("ledger entry is invalid");}
 function validateEntitlement(x:ReconciliationEntitlement){if(!safeId(x.productId,255)||!safeId(x.transactionId,255)||(x.state!=="active"&&x.state!=="revoked"&&x.state!=="refunded")||(x.environment!=="sandbox"&&x.environment!=="production")||!instant(x.purchasedAt)||!instant(x.stateEffectiveAt)||Date.parse(x.stateEffectiveAt)<Date.parse(x.purchasedAt))throw new AccountLinkReconciliationError("entitlement is invalid");}

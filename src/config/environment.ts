@@ -15,6 +15,8 @@ export interface RuntimeConfiguration {
   readonly guestStartingCoins: number;
   readonly guestStartingGems: number;
   readonly guestStartingEnergy: number;
+  readonly accountLinkContentVersion: string | undefined;
+  readonly accountDeletionEnabled: boolean;
 }
 
 export class EnvironmentConfigurationError extends Error {}
@@ -100,6 +102,9 @@ export function loadRuntimeConfiguration(
   const appleAudience = (appleAudienceRaw !== undefined && appleAudienceRaw !== "")
     ? appleAudienceRaw
     : undefined;
+  const accountLinkContentVersion=optionalIdentifier(environment,"SCO_ACCOUNT_LINK_CONTENT_VERSION",64);
+  const accountDeletionEnabled=optionalBoolean(environment,"SCO_ACCOUNT_DELETION_ENABLED");
+  if(accountDeletionEnabled&&appleAudience===undefined)throw new EnvironmentConfigurationError("SCO_ACCOUNT_DELETION_ENABLED requires SCO_APPLE_AUDIENCE");
 
   return {
     environment: runtimeEnvironment,
@@ -113,8 +118,13 @@ export function loadRuntimeConfiguration(
     guestStartingCoins,
     guestStartingGems,
     guestStartingEnergy,
+    accountLinkContentVersion,
+    accountDeletionEnabled,
   };
 }
+
+function optionalIdentifier(environment:Readonly<Record<string,string|undefined>>,name:string,max:number):string|undefined{const value=environment[name]?.trim();if(value===undefined||value==="")return undefined;if(value.length>max||!/^[A-Za-z0-9._-]+$/.test(value))throw new EnvironmentConfigurationError(`${name} is invalid`);return value;}
+function optionalBoolean(environment:Readonly<Record<string,string|undefined>>,name:string):boolean{const value=environment[name]?.trim();if(value===undefined||value===""||value==="false")return false;if(value==="true")return true;throw new EnvironmentConfigurationError(`${name} must be true or false`);}
 
 function required(
   environment: Readonly<Record<string, string | undefined>>,

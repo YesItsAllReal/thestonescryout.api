@@ -12,8 +12,10 @@ test("Apple sign-in atomically creates player, hashed mapping, and replay", asyn
   const client = new Client([{}, {}, {}]);
   assert.equal((await repo(client).signInOrCreate(input)).playerId, playerId);
   const writes = (client.commands[2] as TransactWriteCommand).input.TransactItems;
-  assert.equal(writes?.length, 3);
-  const mapping = writes?.[1]?.Put?.Item;
+  assert.equal(writes?.length, 4);
+  assert.equal(writes?.[1]?.Put?.Item?.entityType,"Balance");
+  assert.equal(writes?.[1]?.Put?.Item?.originCoins,0);
+  const mapping = writes?.[2]?.Put?.Item;
   assert.equal(writes?.[0]?.Put?.Item?.accountState, "active");
   assert.match(String(mapping?.pk), /^PROVIDER#[a-f0-9]{64}#[a-f0-9]{64}$/);
   assert.equal(JSON.stringify(mapping).includes(input.subject), false);

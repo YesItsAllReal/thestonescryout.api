@@ -9,19 +9,23 @@ import { DynamoDbEconomyRepository } from "../economy/dynamodb-economy-repositor
 import { DynamoDbEntitlementRepository } from "../economy/dynamodb-entitlement-repository.js";
 import { DynamoDbOfflineSyncRepository } from "../sync/dynamodb-offline-sync-repository.js";
 import { DynamoDbCommerceRepository } from "../commerce/dynamodb-commerce-repository.js";
+import { DynamoDbAccountLinkRepository } from "../accounts/dynamodb-account-link-repository.js";
 
-export interface AwsPersistenceConfiguration {readonly playerTableName:string;readonly guestStartingBalance:GuestStartingBalance}
+export interface AwsPersistenceConfiguration {readonly playerTableName:string;readonly guestStartingBalance:GuestStartingBalance;readonly accountLinkContentVersion?:string}
 export class AccountLinkReconciliationNotConfiguredError extends Error {}
 
 export function createAwsPersistence(input:{readonly documentClient:DynamoDBDocumentClient;readonly configuration:AwsPersistenceConfiguration;readonly resolveLinkConflict?:AppleAccountRepository["resolveLinkConflict"]}){
   const {documentClient:client,configuration}=input;
   if(configuration.playerTableName.trim()==="")throw new Error("player table name is required");
-  const signIn=new DynamoDbAppleSignInRepository(client,configuration.playerTableName);
+  const signIn=new DynamoDbAppleSignInRepository(client,configuration.playerTableName,undefined,86_400,configuration.guestStartingBalance);
   const link=new DynamoDbAppleLinkRepository(client,configuration.playerTableName);
+  const reconciliation=configuration.accountLinkContentVersion===undefined?undefined:new DynamoDbAccountLinkRepository(client,configuration.playerTableName,configuration.accountLinkContentVersion);
   const appleAccount:AppleAccountRepository={
     signInOrCreate:value=>signIn.signInOrCreate(value),
     linkGuest:value=>link.linkGuest(value),
-    resolveLinkConflict:input.resolveLinkConflict??(async()=>{throw new AccountLinkReconciliationNotConfiguredError("account-link reconciliation is not configured");}),
+    resolveLinkConflict:input.resolveLinkConflict??(reconciliation===undefined
+      ? async()=>{throw new AccountLinkReconciliationNotConfiguredError("account-link reconciliation is not configured");}
+      : value=>reconciliation.resolveLinkConflict(value)),
   };
   return{
     guestPlayer:new DynamoDbGuestPlayerRepository(client,configuration.playerTableName,undefined,86_400,configuration.guestStartingBalance),

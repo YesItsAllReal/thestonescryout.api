@@ -34,6 +34,8 @@ test("runtime configuration loads all fields correctly", () => {
     guestStartingCoins: 100,
     guestStartingGems: 5,
     guestStartingEnergy: 40,
+    accountLinkContentVersion: undefined,
+    accountDeletionEnabled: false,
   });
 });
 
@@ -171,3 +173,7 @@ test("accepts zero starting balances", () => {
   assert.equal(config.guestStartingGems, 0);
   assert.equal(config.guestStartingEnergy, 0);
 });
+
+test("optional account-link content version and deletion flag load safely",()=>{const config=loadRuntimeConfiguration({...VALID,SCO_ACCOUNT_LINK_CONTENT_VERSION:"starter-1",SCO_ACCOUNT_DELETION_ENABLED:"true"});assert.equal(config.accountLinkContentVersion,"starter-1");assert.equal(config.accountDeletionEnabled,true);});
+test("account deletion cannot be enabled without Apple federation",()=>{const {SCO_APPLE_AUDIENCE:_,...withoutApple}=VALID;assert.throws(()=>loadRuntimeConfiguration({...withoutApple,SCO_ACCOUNT_DELETION_ENABLED:"true"}),/requires SCO_APPLE_AUDIENCE/);});
+test("invalid optional activation values fail closed",()=>{assert.throws(()=>loadRuntimeConfiguration({...VALID,SCO_ACCOUNT_DELETION_ENABLED:"yes"}));assert.throws(()=>loadRuntimeConfiguration({...VALID,SCO_ACCOUNT_LINK_CONTENT_VERSION:"unsafe/value"}));});

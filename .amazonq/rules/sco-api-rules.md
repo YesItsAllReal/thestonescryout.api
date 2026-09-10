@@ -36,17 +36,19 @@ was skipped by owner decision; ItsAllRealAdmin was used directly for all phases.
 - SCO_APPLE_AUDIENCE: NOT SET — Apple routes return 503 until Apple Developer portal confirms
   com.itsallrealministries.stonescryout is Sign in with Apple-enabled
 
-### Local working tree (not yet committed)
+### Source and deployment boundary
 
-- TypeScript tests: 246/246 pass
-- PowerShell tests: 30/30 pass
-- Modified files: scripts/aws-helpers.ps1, scripts/smoke-test.ps1,
-  src/auth/cognito-gateway-adapter.ts, tests/aws-identity-services.test.ts,
-  tests/cognito-gateway-adapter.test.ts, docs/IMPLEMENTATION_STATUS.md
-- Post-deployment revocation hardening (cognito-gateway-adapter.ts revoke() fix)
-  was deployed to sco-dev-api from commit aea102f on 2026-09-08.
-- The live API Lambda code and the committed source are synchronized at
-  commit aea102f. The corrective deployment passed all 17 smoke tests.
+- Post-deployment revocation hardening was deployed to sco-dev-api from commit
+  aea102f on 2026-09-08 and passed all 17 smoke tests.
+- Later local Checkpoint 6 work is not live merely because it exists or passes
+  tests. Read `docs/IMPLEMENTATION_STATUS.md` and inspect Git before proposing a
+  deployment; never claim that the live Lambda matches the current HEAD without
+  a fresh read-only comparison.
+- Current local validation baseline as of 2026-09-10: 358/358 TypeScript tests,
+  30/30 PowerShell tests, valid OpenAPI, and both Lambda artifacts validated.
+- Locally implemented but disabled/unapproved live capabilities include account
+  deletion, account-link reconciliation, economy/entitlement reads, and other
+  routes explicitly identified in `docs/IMPLEMENTATION_STATUS.md`.
 
 ## Authorization rules — read carefully before every session
 

@@ -11,7 +11,7 @@ import { loadRuntimeConfiguration } from "../config/environment.js";
 import { createHealthHandler } from "../http/health-handler.js";
 import { createGuestSessionHandler } from "../http/guest-session-handler.js";
 import { createAppleSignInHandler, createAppleLinkHandler } from "../http/apple-account-handlers.js";
-import { createGetAccountHandler } from "../http/account-handlers.js";
+import { createDeleteAccountHandler, createGetAccountHandler } from "../http/account-handlers.js";
 import { createGetSaveHandler, createPutSaveHandler } from "../http/save-handlers.js";
 import { createRefreshSessionHandler, createRevokeSessionHandler } from "../http/session-handlers.js";
 import { createGetEconomyHandler, createGetEntitlementsHandler } from "../http/economy-handlers.js";
@@ -57,14 +57,8 @@ const identity = createAwsIdentityServices({
     cognitoUserPoolId:      config.cognitoUserPoolId,
     cognitoClientId:        config.cognitoClientId,
     refreshLifetimeSeconds: config.refreshLifetimeSeconds,
-  },
-  // Account deletion is not deployable with a stub revoker.
-  // The route is disabled with 503 below; this stub is never reached.
-  deletionAuthorizer: {
-    authorize: async () => { throw new Error("deletion authorizer not configured"); },
-  },
-  sessionRevoker: {
-    revokeAll: async () => { throw new Error("session revoker not configured"); },
+    ...(config.accountLinkContentVersion===undefined?{}:{accountLinkContentVersion:config.accountLinkContentVersion}),
+    accountDeletionEnabled: config.accountDeletionEnabled,
   },
   now,
 });
@@ -111,7 +105,7 @@ function authenticatedNotAvailable(route: string): HttpHandler {
 }
 
 // Routes intentionally kept unavailable in this deployment slice:
-//   DELETE /v1/account          — reauthentication and provider-wide revocation are not composed
+//   DELETE /v1/account          — disabled until Apple confirmation and IAM-backed activation
 //   POST   /v1/spend            — the complete approved action/reference rule table is pending
 //   POST   /v1/rewards/claim    — provider reward-evidence verification is pending
 //   POST   /v1/purchases/verify — Checkpoint 7 provider verification is pending
@@ -143,7 +137,9 @@ const appHandler = createApiRouter({
     { method: "GET",    path: "/v1/entitlements",    handler: createGetEntitlementsHandler(entitlement, authDeps) },
 
     // Not yet deployed — explicit 503 with appropriate access control.
-    { method: "DELETE", path: "/v1/account",                 handler: authenticatedNotAvailable("DELETE /v1/account") },
+    { method: "DELETE", path: "/v1/account",                 handler: identity.accountDeletionEnabled
+        ? createDeleteAccountHandler(identity.account, authDeps)
+        : authenticatedNotAvailable("DELETE /v1/account") },
     { method: "POST",   path: "/v1/spend",                   handler: authenticatedNotAvailable("POST /v1/spend") },
     { method: "POST",   path: "/v1/rewards/claim",           handler: authenticatedNotAvailable("POST /v1/rewards/claim") },
     { method: "POST",   path: "/v1/purchases/verify",        handler: authenticatedNotAvailable("POST /v1/purchases/verify") },

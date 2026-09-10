@@ -66,6 +66,13 @@ table keys. Any lifecycle data must use separately protected attributes.
 - Economy mutations use one transaction containing the idempotency record,
   balance condition/update, immutable ledger entry, and any entitlement/reward
   state. A spend condition requires the resulting balance to be nonnegative.
+- New balance records retain immutable `originCoins`, `originGems`, and
+  `originEnergy` fields alongside the current values. Reconciliation proves each
+  source balance as origin plus immutable ledger deltas, keeps only the existing
+  account's origin grant, and deduplicates verified grants. This prevents both
+  silent currency loss and farming new-account starting grants. Legacy balances
+  without origin fields require an explicit verified backfill and fail closed in
+  account linking until that migration is complete.
 - Purchase processing transactionally claims the environment/transaction ID,
   checks its player binding, and writes any balance, ledger, and entitlement
   changes. Ad processing similarly claims the provider event globally and binds

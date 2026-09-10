@@ -218,8 +218,8 @@ provisioned resources section below for identifiers.
 - Apple linking now exposes separate persistence operations for an initial guest
   link and an explicit conflict resolution. This prevents a DynamoDB adapter
   from treating `preferGuestSave` or `preferExistingSave` as a simple provider
-  pointer update; resolution must pass through the forthcoming atomic
-  save/economy/entitlement reconciliation boundary.
+  pointer update; resolution passes through the atomic
+  save/economy/entitlement reconciliation boundary described below.
 - Account-link planning now preserves the existing Apple account as the identity
   survivor regardless of board-save choice, validates all source records before
   policy execution, and carries complete balance, save-device, and entitlement
@@ -230,9 +230,9 @@ provisioned resources section below for identifiers.
 - CI runs OpenAPI lint, strict TypeScript compilation, and Node tests.
 - A local AWS persistence composition factory now assembles the concrete guest,
   account, Apple sign-in/link, save, offline-sync, economy, entitlement, and
-  commerce DynamoDB adapters without
-  network access at construction. Explicit account-link reconciliation resolution remains
-  fail-closed until its full reconciliation transaction is implemented.
+  commerce DynamoDB adapters without network access at construction. Explicit
+  account-link reconciliation is composed only when a trusted content version
+  is supplied and otherwise remains fail-closed.
 - A local AWS identity-service composition factory now combines those concrete
   repositories with the Cognito access-token verifier, Apple identity verifier,
   guest/account/save services, and injected provider lifecycle ports. Factory
@@ -247,9 +247,10 @@ provisioned resources section below for identifiers.
   read-only and must stop for owner approval before changing AWS.
 - Local implementation of Cognito custom-auth gateway, DynamoDB refresh
   credential registry, and Cognito trigger dispatcher is complete and tested.
-  244/244 local tests pass (225 pre-deployment + 19 new focused gateway tests
-  added post-deployment). Concrete adapters are deployed to Lambda.
-  Checkpoint 6 deployment is complete. Deployment-time fixes (Bugs 1–4) and
+  The deployed Cognito Option 1 Lite baseline passed 244/244 local tests
+  (225 pre-deployment + 19 focused gateway tests). Its concrete adapters are
+  deployed to Lambda. This was the Cognito deployment slice, not completion of
+  all Checkpoint 6 routes. Deployment-time fixes (Bugs 1–4) and
   post-deployment revocation hardening (Bug 5, revoke() error handling) are
   live. The corrective API code-only deployment used commit aea102f and passed
   all 17 smoke tests. See
@@ -275,14 +276,25 @@ provisioned resources section below for identifiers.
   wired into the Lambda yet: deployment requires explicit approval to add
   `cognito-idp:AdminUserGlobalSignOut` to the API role and completion of the
   deletion reauthentication boundary.
-- A pure DynamoDB account-link reconciliation transaction builder now binds the
+- A concrete DynamoDB account-link reconciliation repository and pure transaction
+  builder now strongly load and bind the
   pending unexpired ticket, active profiles, Apple mapping, hashed installation
   mapping, both balances, and both save revisions in one conditional write. It
   tombstones the guest, independently applies the chosen board, transfers
   guest-owned entitlement transaction ownership and unlocks, appends complete
   reconciliation ledger/audit records, stores only a hashed replay key, and
-  refuses plans beyond DynamoDB's 100-action limit. Concrete state loading and
-  repository execution remain the next local slice.
+  refuses plans beyond DynamoDB's 100-action limit. Composition is enabled only
+  when a trusted account-link content version is injected. Balance reconciliation
+  proves origin plus ledger history and fails closed on legacy balance rows until
+  their origin fields receive an explicitly approved backfill.
+- Account deletion no longer depends on Lambda stubs locally. When both Apple
+  audience configuration and the disabled-by-default
+  `SCO_ACCOUNT_DELETION_ENABLED=true` gate are present, the identity factory
+  composes concrete Apple reauthentication, strongly consistent provider
+  ownership lookup, and Cognito global sign-out, and the Lambda enables the real
+  deletion handler. The live gate remains off; activation requires Apple portal
+  confirmation, the additional IAM permission, deployment approval, and smoke
+  testing.
 - A local Apple account-deletion authorizer now requires a fresh verified Apple
   assertion and a strongly consistent hashed provider-mapping lookup that must
   resolve to the authenticated player. Guest sessions, missing proofs,
@@ -326,10 +338,11 @@ provisioned resources section below for identifiers.
   into self-contained CJS files. Artifact validation runs a child Node process
   that requires() each bundle and asserts typeof handler === "function", failing
   on every unexpected error including cold-start failures.
-- The future API Lambda IAM policy requires exactly five Cognito actions:
+- The deployed session-issuance API Lambda IAM policy requires five Cognito actions:
   AdminCreateUser, AdminGetUser, AdminSetUserPassword, AdminInitiateAuth,
   AdminRespondToAuthChallenge. AdminGetUser is required for every repeat
-  sign-in (existing shadow users) and must not be omitted.
+  sign-in (existing shadow users) and must not be omitted. Enabling account
+  deletion will additionally require `AdminUserGlobalSignOut`, for six total.
 - Owner-approved development economy starting values: 200 coins, 20 gems,
   200 energy, energyCap=200. These are trusted server configuration values
   supplied via Lambda environment variables and signed remote configuration.
@@ -347,8 +360,9 @@ provisioned resources section below for identifiers.
 ## Checkpoint 6 closure audit
 
 Checkpoint 6 is not yet closed end to end. Its contract, persistence, security,
-and offline-test foundations are substantially implemented, while the following
-behaviors deliberately fail closed:
+and offline-test foundations are substantially implemented. The current local
+tree passes 358/358 TypeScript tests, 30/30 PowerShell tests, OpenAPI validation,
+and both Lambda artifact checks. The following behaviors deliberately fail closed:
 
 1. `POST /v1/sync/commands`: DynamoDB persistence and deterministic envelope
    validation exist, but authoritative game-command execution rules must come
@@ -367,20 +381,18 @@ behaviors deliberately fail closed:
 5. Apple sign-in/link: contract and concrete verification/persistence exist, but
    remain disabled until the Apple Developer portal confirms the bundle audience
    and `SCO_APPLE_AUDIENCE` is separately approved for deployment.
-6. Account-link conflict reconciliation: the explicit choice contract and
-   fail-closed persistence boundary exist; the atomic save/economy/entitlement
-   reconciliation transaction remains to be implemented.
+6. Account-link conflict reconciliation is locally implemented, but activation
+   requires a trusted content version and an approved backfill of origin fields
+   for any legacy balances created before this additive migration.
 
 The purchase, App Store notification, rewarded-ad, and Game Center work belongs
 to Checkpoint 7 and does not block Checkpoint 6 closure.
 
 ## Next contract-first slices
 
-1. Implement atomic account-link reconciliation without requiring a provider or
-   infrastructure decision.
-2. Integrate the shared deterministic game-command executor when its command and
+1. Integrate the shared deterministic game-command executor when its command and
    content rules are available from the primary app/shared domain.
-3. Complete the owner/provider-gated Apple, deletion, economy-mutation, and
+2. Complete the owner/provider-gated Apple, deletion, economy-mutation, and
    signed-content activation steps listed above.
 
 ## Provisioned dev environment (us-east-1, account 598628878271)

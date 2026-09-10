@@ -184,7 +184,7 @@ export class DynamoDbGuestPlayerRepository implements GuestPlayerRepository {
 
 function balanceItem(playerId:string,now:Date,balance:GuestStartingBalance):Record<string,unknown>{
   for(const value of [balance.coins,balance.gems,balance.energy])if(!Number.isSafeInteger(value)||value<0)throw new Error("guest starting balance is invalid");
-  return{pk:`PLAYER#${playerId}`,sk:"BALANCE",entityType:"Balance",recordVersion:1,playerId,coins:balance.coins,gems:balance.gems,energy:balance.energy,energyUpdatedAt:now.toISOString(),revision:1};
+  return{pk:`PLAYER#${playerId}`,sk:"BALANCE",entityType:"Balance",recordVersion:1,playerId,coins:balance.coins,gems:balance.gems,energy:balance.energy,originCoins:balance.coins,originGems:balance.gems,originEnergy:balance.energy,energyUpdatedAt:now.toISOString(),revision:1};
 }
 
 function playerItem(player: PlayerProfile, input: GuestInput): Record<string, unknown> {

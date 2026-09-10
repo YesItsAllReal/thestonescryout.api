@@ -3,6 +3,7 @@ import { GetCommand, PutCommand, TransactWriteCommand, type DynamoDBDocumentClie
 import { AccountIdempotencyConflictError, type AppleAccountRepository } from "./apple-account-service.js";
 import type { PlayerProfile } from "./guest-session-service.js";
 import { providerIdentityKey } from "./provider-identity-key.js";
+import type { GuestStartingBalance } from "./dynamodb-guest-player-repository.js";
 
 type Client = Pick<DynamoDBDocumentClient, "send">;
 type Input = Parameters<AppleAccountRepository["signInOrCreate"]>[0];
@@ -13,6 +14,7 @@ export class DynamoDbAppleSignInRepository implements Pick<AppleAccountRepositor
     private readonly tableName: string,
     private readonly createPlayerId: () => string = randomUUID,
     private readonly idempotencyTtlSeconds = 86_400,
+    private readonly startingBalance:GuestStartingBalance={coins:0,gems:0,energy:0},
   ) {}
 
   public async signInOrCreate(input: Input): Promise<PlayerProfile> {
@@ -38,6 +40,7 @@ export class DynamoDbAppleSignInRepository implements Pick<AppleAccountRepositor
           pk: `PLAYER#${player.playerId}`, sk: "PROFILE", entityType: "Player", recordVersion: 1, accountState: "active",
           ...player, displayName: null, locale: "und", linkedProviders: ["apple"],
         }, ConditionExpression: "attribute_not_exists(pk)" } },
+        { Put: { TableName:this.tableName,Item:{pk:`PLAYER#${player.playerId}`,sk:"BALANCE",entityType:"Balance",recordVersion:1,playerId:player.playerId,coins:this.startingBalance.coins,gems:this.startingBalance.gems,energy:this.startingBalance.energy,originCoins:this.startingBalance.coins,originGems:this.startingBalance.gems,originEnergy:this.startingBalance.energy,energyUpdatedAt:input.now.toISOString(),revision:1},ConditionExpression:"attribute_not_exists(pk) AND attribute_not_exists(sk)"}},
         { Put: { TableName: this.tableName, Item: {
           ...providerKey, entityType: "ProviderMapping", recordVersion: 1,
           provider: "apple", playerId: player.playerId,

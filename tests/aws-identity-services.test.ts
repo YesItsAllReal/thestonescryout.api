@@ -39,7 +39,10 @@ test("AWS identity factory composes concrete services without network access", (
   assert.ok(services.save);
   assert.ok(services.tokenVerifier);
   assert.ok(services.sessionLifecycle);
+  assert.equal(services.accountDeletionEnabled,false);
 });
+
+test("AWS identity factory composes concrete deletion boundaries only when explicitly enabled",()=>{let calls=0;const stub={async send(){calls++;return{};}};const services=createAwsIdentityServices({documentClient:stub as unknown as DynamoDBDocumentClient,cognitoClient:stub as unknown as CognitoIdentityProviderClient,configuration:{playerTableName:"players",guestStartingBalance:{coins:0,gems:0,energy:0},tokenIssuer:"https://cognito-idp.us-east-1.amazonaws.com/us-east-1_TestPool",tokenAudience:"test-client-id",appleAudience:"com.example.app",cognitoUserPoolId:"us-east-1_TestPool",cognitoClientId:"test-client-id",refreshLifetimeSeconds:2592000,accountDeletionEnabled:true},now:()=>new Date()});assert.equal(calls,0);assert.equal(services.accountDeletionEnabled,true);assert.ok(services.account);});
 
 test("AWS identity factory returns undefined appleAccount when appleAudience is absent", () => {
   const stubClient = { async send() { return {}; } };
