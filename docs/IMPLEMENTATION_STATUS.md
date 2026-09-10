@@ -1,6 +1,6 @@
 # Checkpoint 6 implementation status
 
-Last verified: 2026-09-08
+Last verified: 2026-09-09
 
 Architecture: AWS serverless/DynamoDB is approved by ADR 0001. Dev environment
 resources have been provisioned in us-east-1 (account 598628878271). See the
@@ -201,7 +201,8 @@ provisioned resources section below for identifiers.
   server configuration and never accepted from the session request.
 - Offline adapter tests inspect generated DynamoDB commands and cover atomic
   creation, identical replay, changed-request rejection, and transaction-race
-  recovery. The adapter is not yet wired into or deployed to the Lambda.
+  recovery. The adapter is wired into the Lambda and its guest-session flow is
+  deployed.
 - The concrete DynamoDB save repository is implemented locally with strongly
   consistent player/slot reads, exact revision conditions, atomic save/result
   transactions, player-scoped hashed idempotency keys, durable original-result
@@ -328,15 +329,44 @@ provisioned resources section below for identifiers.
   - Apple authentication deployment blocked until Apple Developer portal
     confirmation is recorded. SCO_APPLE_AUDIENCE must not be set until then.
 
+## Checkpoint 6 closure audit
+
+Checkpoint 6 is not yet closed end to end. Its contract, persistence, security,
+and offline-test foundations are substantially implemented, while the following
+behaviors deliberately fail closed:
+
+1. `POST /v1/sync/commands`: DynamoDB persistence and deterministic envelope
+   validation exist, but authoritative game-command execution rules must come
+   from the shared game domain before replay can safely mutate saves or economy.
+2. `DELETE /v1/account`: durable deletion state, audit, Apple reauthentication,
+   and Cognito global-sign-out adapters exist locally. Composition is blocked on
+   Apple audience confirmation; deployment also needs separately approved
+   `cognito-idp:AdminUserGlobalSignOut` permission.
+3. `POST /v1/spend` and `POST /v1/rewards/claim`: the atomic economy ledger and
+   fail-closed policy boundaries exist. Activation needs the complete approved
+   action/reference price table and a concrete reward-evidence verifier.
+4. `GET /v1/content/catalog` and `GET /v1/config`: HTTPS repositories, signature
+   verification, URL policy, and validation exist locally. Activation needs an
+   approved public signing key, signed objects, and environment URLs; no key or
+   object has been created.
+5. Apple sign-in/link: contract and concrete verification/persistence exist, but
+   remain disabled until the Apple Developer portal confirms the bundle audience
+   and `SCO_APPLE_AUDIENCE` is separately approved for deployment.
+6. Account-link conflict reconciliation: the explicit choice contract and
+   fail-closed persistence boundary exist; the atomic save/economy/entitlement
+   reconciliation transaction remains to be implemented.
+
+The purchase, App Store notification, rewarded-ad, and Game Center work belongs
+to Checkpoint 7 and does not block Checkpoint 6 closure.
+
 ## Next contract-first slices
 
-1. Product-approved consumable refund/clawback or debt-reconciliation policy;
-   current notification handling updates known entitlement/transaction state but
-   never invents a currency debit policy.
-2. Provider revocation lifecycle and durable security/account/economy audit event
-   adapters.
-3. Apple authentication: set SCO_APPLE_AUDIENCE once Apple Developer portal
-   confirms com.itsallrealministries.stonescryout is Sign in with Apple-enabled.
+1. Implement atomic account-link reconciliation without requiring a provider or
+   infrastructure decision.
+2. Integrate the shared deterministic game-command executor when its command and
+   content rules are available from the primary app/shared domain.
+3. Complete the owner/provider-gated Apple, deletion, economy-mutation, and
+   signed-content activation steps listed above.
 
 ## Provisioned dev environment (us-east-1, account 598628878271)
 

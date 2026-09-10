@@ -111,15 +111,15 @@ function authenticatedNotAvailable(route: string): HttpHandler {
 }
 
 // Routes intentionally kept unavailable in this deployment slice:
-//   DELETE /v1/account          — stub revoker not yet implemented
-//   POST   /v1/spend            — DynamoDB economy adapter not yet implemented
-//   POST   /v1/rewards/claim    — DynamoDB economy adapter not yet implemented
-//   POST   /v1/purchases/verify — DynamoDB commerce adapter not yet implemented
-//   POST   /v1/app-store/notifications — DynamoDB commerce adapter not yet implemented
-//   POST   /v1/ads/reward/verify — DynamoDB commerce adapter not yet implemented
-//   GET    /v1/content/catalog  — S3/CloudFront content adapter not yet implemented
-//   GET    /v1/config           — S3/CloudFront content adapter not yet implemented
-//   POST   /v1/sync/commands    — DynamoDB sync adapter not yet implemented
+//   DELETE /v1/account          — reauthentication and provider-wide revocation are not composed
+//   POST   /v1/spend            — the complete approved action/reference rule table is pending
+//   POST   /v1/rewards/claim    — provider reward-evidence verification is pending
+//   POST   /v1/purchases/verify — Checkpoint 7 provider verification is pending
+//   POST   /v1/app-store/notifications — Checkpoint 7 provider verification is pending
+//   POST   /v1/ads/reward/verify — Checkpoint 7 provider verification is pending
+//   GET    /v1/content/catalog  — signing key and published content are not configured
+//   GET    /v1/config           — signing key and published content are not configured
+//   POST   /v1/sync/commands    — authoritative game-command execution rules are pending
 
 const appHandler = createApiRouter({
   routes: [
