@@ -12,7 +12,8 @@ export type EconomyReason =
   | "STORE_SPEND"
   | "INVENTORY_EXPANSION"
   | "EVENT_REWARD"
-  | "OFFLINE_SYNC_RECONCILIATION";
+  | "OFFLINE_SYNC_RECONCILIATION"
+  | "ACCOUNT_LINK_RECONCILIATION";
 
 export interface EconomyBalance {
   readonly coins: number;

@@ -8,7 +8,7 @@ export interface ReconciliationLedgerEntry { readonly ledgerEntryId:string; read
 export interface ReconciliationEntitlement { readonly productId:string; readonly transactionId:string; readonly state:"active"|"revoked"|"refunded"; readonly purchasedAt:string; readonly stateEffectiveAt:string; readonly environment:"sandbox"|"production" }
 export interface EconomyReconciliation { readonly balance:ReconciliationBalance; readonly ledgerReasonCodes:readonly string[] }
 export interface EconomyReconciliationPolicy { reconcile(input:{readonly survivorPlayerId:string;readonly guest:ReconciliationBalance;readonly existing:ReconciliationBalance;readonly guestLedger:readonly ReconciliationLedgerEntry[];readonly existingLedger:readonly ReconciliationLedgerEntry[]}):EconomyReconciliation }
-export interface AccountLinkState { readonly guest:PlayerProfile;readonly existing:PlayerProfile;readonly guestSave?:ReconciliationSave;readonly existingSave?:ReconciliationSave;readonly guestBalance:ReconciliationBalance;readonly existingBalance:ReconciliationBalance;readonly guestLedger?:readonly ReconciliationLedgerEntry[];readonly existingLedger?:readonly ReconciliationLedgerEntry[];readonly guestEntitlements:readonly ReconciliationEntitlement[];readonly existingEntitlements:readonly ReconciliationEntitlement[];readonly guestUnlockIds:readonly string[];readonly existingUnlockIds:readonly string[] }
+export interface AccountLinkState { readonly guest:PlayerProfile;readonly existing:PlayerProfile;readonly guestInstallationIdHash:string;readonly guestSave?:ReconciliationSave;readonly existingSave?:ReconciliationSave;readonly guestBalance:ReconciliationBalance;readonly existingBalance:ReconciliationBalance;readonly guestLedger?:readonly ReconciliationLedgerEntry[];readonly existingLedger?:readonly ReconciliationLedgerEntry[];readonly guestEntitlements:readonly ReconciliationEntitlement[];readonly existingEntitlements:readonly ReconciliationEntitlement[];readonly guestUnlockIds:readonly string[];readonly existingUnlockIds:readonly string[] }
 export interface AccountLinkPlan { readonly survivorPlayerId:string;readonly retiredPlayerId:string;readonly selectedSave?:ReconciliationSave;readonly economy:EconomyReconciliation;readonly entitlements:readonly ReconciliationEntitlement[];readonly unlockIds:readonly string[] }
 export class AccountLinkReconciliationError extends Error {}
 
@@ -28,6 +28,7 @@ function validateState(state:AccountLinkState,choice:LinkSaveChoice):void {
   if(choice!=="preferGuestSave"&&choice!=="preferExistingSave")throw new AccountLinkReconciliationError("save choice is invalid");
   if(!validPlayer(state.guest)||!validPlayer(state.existing)||state.guest.playerId===state.existing.playerId||state.guest.accountKind!=="guest"||state.existing.accountKind!=="apple"||state.guest.deletionState!=="active"||state.existing.deletionState!=="active")throw new AccountLinkReconciliationError("account link players are invalid");
   validateBalance(state.guestBalance);validateBalance(state.existingBalance);
+  if(!/^[a-f0-9]{64}$/.test(state.guestInstallationIdHash))throw new AccountLinkReconciliationError("guest installation hash is invalid");
   if(state.guestSave!==undefined)validateSave(state.guestSave);if(state.existingSave!==undefined)validateSave(state.existingSave);
   for(const entry of [...(state.guestLedger??[]),...(state.existingLedger??[])])validateLedger(entry);
   for(const item of [...state.guestEntitlements,...state.existingEntitlements])validateEntitlement(item);
@@ -39,6 +40,8 @@ function validateEconomyResult(value:EconomyReconciliation,state:AccountLinkStat
 }
 function reconcileEntitlements(state:AccountLinkState):readonly ReconciliationEntitlement[]{
   const byTransaction=new Map<string,ReconciliationEntitlement>(),byProduct=new Map<string,ReconciliationEntitlement>();
+  const existingTransactions=new Set(state.existingEntitlements.map(item=>item.transactionId));
+  for(const item of state.guestEntitlements)if(existingTransactions.has(item.transactionId))throw new AccountLinkReconciliationError("entitlement transaction has multiple owners");
   for(const item of [...state.existingEntitlements,...state.guestEntitlements]){
     const transaction=byTransaction.get(item.transactionId),product=byProduct.get(item.productId);
     if(transaction!==undefined&&!same(transaction,item))throw new AccountLinkReconciliationError("entitlement transaction state conflicts");

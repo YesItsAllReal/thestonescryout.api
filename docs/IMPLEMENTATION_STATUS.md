@@ -275,6 +275,14 @@ provisioned resources section below for identifiers.
   wired into the Lambda yet: deployment requires explicit approval to add
   `cognito-idp:AdminUserGlobalSignOut` to the API role and completion of the
   deletion reauthentication boundary.
+- A pure DynamoDB account-link reconciliation transaction builder now binds the
+  pending unexpired ticket, active profiles, Apple mapping, hashed installation
+  mapping, both balances, and both save revisions in one conditional write. It
+  tombstones the guest, independently applies the chosen board, transfers
+  guest-owned entitlement transaction ownership and unlocks, appends complete
+  reconciliation ledger/audit records, stores only a hashed replay key, and
+  refuses plans beyond DynamoDB's 100-action limit. Concrete state loading and
+  repository execution remain the next local slice.
 - A local Apple account-deletion authorizer now requires a fresh verified Apple
   assertion and a strongly consistent hashed provider-mapping lookup that must
   resolve to the authenticated player. Guest sessions, missing proofs,

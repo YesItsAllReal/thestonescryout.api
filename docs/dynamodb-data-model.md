@@ -32,6 +32,7 @@ account or deletion-state contract.
 | Balance | `PLAYER#<playerId>` | `BALANCE` | Load authoritative balances |
 | Ledger entry | `PLAYER#<playerId>` | `LEDGER#<createdAt>#<entryId>` | Page a player's immutable economy history |
 | Entitlement | `PLAYER#<playerId>` | `ENTITLEMENT#<productId>` | Load current product entitlement state |
+| Content unlock | `PLAYER#<playerId>` | `UNLOCK#<unlockId>` | Union verified content progress during account reconciliation |
 | Purchase transaction | `TRANSACTION#<environment>#<transactionId>` | `GRANT` | Prevent a transaction from granting twice |
 | App Store notification | `NOTIFICATION#<environment>#<notificationId>` | `RESULT` | Process a signed provider event once |
 | Ad completion | `AD_EVENT#<provider>#<providerEventId>` | `GRANT` | Prevent one verified completion from granting across players |
@@ -80,6 +81,12 @@ table keys. Any lifecycle data must use separately protected attributes.
   to implement a save choice by merely repointing the provider mapping; it must
   atomically reconcile the selected save, authoritative economy, entitlements,
   content unlocks, provider ownership, conflict state, and audit result.
+- The reconciliation write additionally removes the retired guest installation
+  mapping, marks its profile `accountState=merged`, conditionally transfers
+  guest-owned entitlement transaction ownership and unlocks, and writes
+  `ACCOUNT_LINK_RECONCILIATION` ledger entries with trusted build/content
+  context. The pure builder rejects plans requiring more than DynamoDB's 100
+  transactional actions; it never silently truncates a reconciliation.
 - Account deletion uses a state transition condition (`active` to `requested`)
   and an idempotent job record. Retained purchase records are minimized and
   separated from deleted profile data.
