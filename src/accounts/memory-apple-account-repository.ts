@@ -136,9 +136,12 @@ export class MemoryAppleAccountRepository implements AppleAccountRepository {
     ) {
       throw new Error("link conflict is invalid or expired");
     }
-    const selectedId = saveChoice === "preferGuestSave" ? guestPlayerId : conflict.existingPlayerId;
-    const selected = this.players.get(selectedId);
-    if (selected === undefined) throw new Error("selected player was not found");
+    // This adapter does not store board snapshots. The choice is validated by
+    // the service contract but cannot select identity ownership: the account
+    // already bound to the verified Apple identity always survives.
+    void saveChoice;
+    const selected = this.players.get(conflict.existingPlayerId);
+    if (selected === undefined) throw new Error("existing player was not found");
     const linked = { ...selected, accountKind: "apple" } satisfies PlayerProfile;
     this.players.set(linked.playerId, linked);
     this.playerIdByProvider.set(key, linked.playerId);

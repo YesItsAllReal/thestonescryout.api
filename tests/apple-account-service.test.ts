@@ -126,6 +126,20 @@ test("linking never silently overwrites progress when Apple already belongs to a
   assert.equal(resolved.player.playerId, existingId);
 });
 
+test("preferring the guest save still preserves the existing Apple identity owner", async () => {
+  const repository = new MemoryAppleAccountRepository();
+  const guestId = "00000000-0000-4000-8000-000000000105";
+  const existingId = "00000000-0000-4000-8000-000000000106";
+  repository.addPlayer(player(guestId, "guest"));
+  repository.addPlayer(player(existingId, "apple"));
+  repository.associateAppleIdentity("https://appleid.apple.com", "apple-subject-123", existingId);
+  const accountService = service(repository);
+  let conflictId = "";
+  await assert.rejects(accountService.linkGuest({principal:{playerId:guestId,sessionKind:"guest",issuer:"test",audience:"test"},credential,idempotencyKey:"apple-link-0004"}),(error:unknown)=>{if(!(error instanceof AccountLinkDecisionRequiredError))return false;conflictId=error.conflictId;return true;});
+  const resolved=await accountService.linkGuest({principal:{playerId:guestId,sessionKind:"guest",issuer:"test",audience:"test"},credential,idempotencyKey:"apple-link-resolution-0002",resolution:{conflictId,saveChoice:"preferGuestSave"}});
+  assert.equal(resolved.player.playerId,existingId);
+});
+
 test("an account session cannot impersonate a guest during linking", async () => {
   await assert.rejects(
     service(new MemoryAppleAccountRepository()).linkGuest({

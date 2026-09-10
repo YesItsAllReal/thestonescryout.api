@@ -42,7 +42,9 @@ export class DynamoDbAccountRepository implements AccountRepository {
       Key: profileKey(playerId),
       ConsistentRead: true,
     }));
-    return response.Item === undefined ? undefined : readProfile(response.Item, playerId);
+    if (response.Item === undefined) return undefined;
+    if (response.Item.accountState === "merged") return undefined;
+    return readProfile(response.Item, playerId);
   }
 
   public async requestDeletionWithAudit(input: DeletionInput): Promise<AccountDeletionReceipt> {
@@ -74,13 +76,14 @@ export class DynamoDbAccountRepository implements AccountRepository {
               TableName: this.tableName,
               Key: profileKey(input.playerId),
               UpdateExpression: "SET deletionState = :requested, deletionRequestedAt = :requestedAt",
-              ConditionExpression: "entityType = :playerType AND recordVersion = :recordVersion AND deletionState = :active",
+              ConditionExpression: "entityType = :playerType AND recordVersion = :recordVersion AND deletionState = :active AND (attribute_not_exists(accountState) OR accountState = :accountActive)",
               ExpressionAttributeValues: {
                 ":requested": "requested",
                 ":requestedAt": receipt.requestedAt,
                 ":playerType": "Player",
                 ":recordVersion": 1,
                 ":active": "active",
+                ":accountActive": "active",
               },
             },
           },
@@ -176,6 +179,7 @@ export class DynamoDbAccountRepository implements AccountRepository {
 
 function readProfile(item: Record<string, unknown>, playerId: string): AccountProfile {
   if (item.entityType !== "Player" || item.recordVersion !== 1 || item.playerId !== playerId ||
+      (item.accountState !== undefined && item.accountState !== "active") ||
       (item.accountKind !== "guest" && item.accountKind !== "apple" && item.accountKind !== "google") ||
       typeof item.locale !== "string" || typeof item.createdAt !== "string" ||
       (item.deletionState !== "active" && item.deletionState !== "requested" && item.deletionState !== "processing") ||

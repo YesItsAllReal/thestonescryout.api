@@ -15,7 +15,7 @@ export class LedgerReconciliationPolicy implements EconomyReconciliationPolicy {
       }
       entries.set(entry.ledgerEntryId,entry);
     }
-    const balance={coins:0,gems:0,energy:0,revision:Math.max(input.guest.revision,input.existing.revision)+1};
+    const balance={coins:0,gems:0,energy:0,energyUpdatedAt:input.existing.energyUpdatedAt,revision:Math.max(input.guest.revision,input.existing.revision)+1};
     for(const entry of entries.values()) balance[entry.resource]+=entry.delta;
     if(balance.coins<0||balance.gems<0||balance.energy<0) throw new AccountLinkReconciliationError("ledger reconstruction produced a negative balance");
     return {balance,ledgerReasonCodes:["ACCOUNT_LINK_RECONCILIATION"]};

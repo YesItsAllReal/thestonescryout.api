@@ -31,8 +31,8 @@ export class DynamoDbAppleLinkRepository implements Pick<AppleAccountRepository,
     const items: ConstructorParameters<typeof TransactWriteCommand>[0]["TransactItems"] = [
       { Update: { TableName: this.tableName, Key: { pk: `PLAYER#${input.guestPlayerId}`, sk: "PROFILE" },
         UpdateExpression: "SET accountKind = :apple, linkedProviders = :providers",
-        ConditionExpression: "entityType = :player AND recordVersion = :version AND accountKind = :guest AND deletionState = :active",
-        ExpressionAttributeValues: { ":apple":"apple", ":providers":["apple"], ":player":"Player", ":version":1, ":guest":"guest", ":active":"active" } } },
+        ConditionExpression: "entityType = :player AND recordVersion = :version AND accountKind = :guest AND deletionState = :active AND (attribute_not_exists(accountState) OR accountState = :accountActive)",
+        ExpressionAttributeValues: { ":apple":"apple", ":providers":["apple"], ":player":"Player", ":version":1, ":guest":"guest", ":active":"active", ":accountActive":"active" } } },
       ...(!mappingExists ? [{ Put: { TableName: this.tableName, Item: { ...provider, entityType:"ProviderMapping", recordVersion:1, provider:"apple", playerId:input.guestPlayerId }, ConditionExpression:"attribute_not_exists(pk)" } }] : []),
       { Put: { TableName:this.tableName, Item:audit(input.guestPlayerId, createdAt, auditId, "APPLE_IDENTITY_LINKED"), ConditionExpression:"attribute_not_exists(pk) AND attribute_not_exists(sk)" } },
       { Put: { TableName:this.tableName, Item:idemItem(idem,input,hash,{kind:"linked",player},this.ttlSeconds), ConditionExpression:"attribute_not_exists(pk)" } },
@@ -53,7 +53,7 @@ export class DynamoDbAppleLinkRepository implements Pick<AppleAccountRepository,
   }
 
   private async get(key: Record<string,string>): Promise<Record<string,unknown>|undefined> { return (await this.client.send(new GetCommand({TableName:this.tableName,Key:key,ConsistentRead:true}))).Item; }
-  private async player(id:string):Promise<PlayerProfile>{const x=await this.get({pk:`PLAYER#${id}`,sk:"PROFILE"});if(x?.entityType!=="Player"||x.recordVersion!==1||x.playerId!==id||(x.accountKind!=="guest"&&x.accountKind!=="apple"&&x.accountKind!=="google")||typeof x.createdAt!=="string"||(x.deletionState!=="active"&&x.deletionState!=="requested"&&x.deletionState!=="processing"))throw new Error("stored player is invalid");return{playerId:id,accountKind:x.accountKind,createdAt:x.createdAt,deletionState:x.deletionState};}
+  private async player(id:string):Promise<PlayerProfile>{const x=await this.get({pk:`PLAYER#${id}`,sk:"PROFILE"});if(x?.entityType!=="Player"||x.recordVersion!==1||x.playerId!==id||(x.accountState!==undefined&&x.accountState!=="active")||(x.accountKind!=="guest"&&x.accountKind!=="apple"&&x.accountKind!=="google")||typeof x.createdAt!=="string"||(x.deletionState!=="active"&&x.deletionState!=="requested"&&x.deletionState!=="processing"))throw new Error("stored player is invalid");return{playerId:id,accountKind:x.accountKind,createdAt:x.createdAt,deletionState:x.deletionState};}
 }
 function replayResult(x:Record<string,unknown>,hash:string):AppleLinkResult{if(x.entityType!=="Idempotency"||x.operation!=="apple.link"||x.recordVersion!==1||x.requestHash!==hash)throw new AccountIdempotencyConflictError("idempotency key was reused for different input");return x.result as AppleLinkResult;}
 function idemItem(key:Record<string,string>,input:Input,hash:string,result:AppleLinkResult,ttl:number){return{...key,entityType:"Idempotency",recordVersion:1,operation:"apple.link",requestHash:hash,result,status:"completed",createdAt:input.now.toISOString(),expiresAtEpochSeconds:Math.floor(input.now.getTime()/1000)+ttl};}

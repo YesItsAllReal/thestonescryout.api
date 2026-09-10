@@ -167,6 +167,7 @@ export class DynamoDbGuestPlayerRepository implements GuestPlayerRepository {
     }));
     const item = result.Item;
     if (item === undefined || item.entityType !== "Player" || item.playerId !== playerId ||
+        (item.accountState !== undefined && item.accountState !== "active") ||
         (item.accountKind !== "guest" && item.accountKind !== "apple" && item.accountKind !== "google") ||
         typeof item.createdAt !== "string" ||
         (item.deletionState !== "active" && item.deletionState !== "requested" && item.deletionState !== "processing")) {
@@ -192,6 +193,8 @@ function playerItem(player: PlayerProfile, input: GuestInput): Record<string, un
     sk: "PROFILE",
     entityType: "Player",
     recordVersion: 1,
+    accountState: "active",
+    installationIdHash: input.installationIdHash,
     ...player,
     locale: input.locale,
     lastSeenBuild: input.appBuild,

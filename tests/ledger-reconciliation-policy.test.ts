@@ -1,4 +1,4 @@
 import assert from "node:assert/strict";import test from "node:test";import {LedgerReconciliationPolicy} from "../src/economy/ledger-reconciliation-policy.js";
-const balance={coins:0,gems:0,energy:0,revision:1};
+const balance={coins:0,gems:0,energy:0,energyUpdatedAt:"2026-01-01T00:00:00Z",revision:1};
 test("ledger policy reconstructs balances and deduplicates verified grants",()=>{const grant={ledgerEntryId:"a",resource:"gems" as const,delta:10,sourceReference:"purchase",verifiedGrantKey:"transaction-1"};const result=new LedgerReconciliationPolicy().reconcile({survivorPlayerId:"p",guest:balance,existing:balance,guestLedger:[grant],existingLedger:[{...grant,ledgerEntryId:"b"}]});assert.equal(result.balance.gems,10);});
 test("ledger policy rejects conflicting verified grant proofs",()=>{assert.throws(()=>new LedgerReconciliationPolicy().reconcile({survivorPlayerId:"p",guest:balance,existing:balance,guestLedger:[{ledgerEntryId:"a",resource:"gems",delta:10,sourceReference:"x",verifiedGrantKey:"same"}],existingLedger:[{ledgerEntryId:"b",resource:"gems",delta:20,sourceReference:"x",verifiedGrantKey:"same"}]}));});

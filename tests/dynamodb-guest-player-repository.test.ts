@@ -55,6 +55,8 @@ test("DynamoDB guest creation atomically writes profile, installation claim, and
   const transaction = (client.commands[2] as TransactWriteCommand).input.TransactItems;
   assert.equal(transaction?.length, 4);
   assert.equal(transaction?.[0]?.Put?.Item?.pk, `PLAYER#${playerId}`);
+  assert.equal(transaction?.[0]?.Put?.Item?.accountState, "active");
+  assert.equal(transaction?.[0]?.Put?.Item?.installationIdHash, input.installationIdHash);
   assert.equal(transaction?.[1]?.Put?.Item?.sk, "BALANCE");
   assert.equal(transaction?.[1]?.Put?.Item?.revision, 1);
   assert.equal(transaction?.[2]?.Put?.Item?.pk, `INSTALLATION#${input.installationIdHash}`);

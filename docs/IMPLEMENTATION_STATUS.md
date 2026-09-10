@@ -1,6 +1,6 @@
 # Checkpoint 6 implementation status
 
-Last verified: 2026-09-09
+Last verified: 2026-09-10
 
 Architecture: AWS serverless/DynamoDB is approved by ADR 0001. Dev environment
 resources have been provisioned in us-east-1 (account 598628878271). See the
@@ -220,6 +220,13 @@ provisioned resources section below for identifiers.
   from treating `preferGuestSave` or `preferExistingSave` as a simple provider
   pointer update; resolution must pass through the forthcoming atomic
   save/economy/entitlement reconciliation boundary.
+- Account-link planning now preserves the existing Apple account as the identity
+  survivor regardless of board-save choice, validates all source records before
+  policy execution, and carries complete balance, save-device, and entitlement
+  provenance needed for conditional persistence. The owner-approved internal
+  `accountState` migration treats legacy missing values as `active`, emits
+  `active` on new profiles, and makes `merged` profiles unavailable to account
+  lookup and authentication without overloading public deletion state.
 - CI runs OpenAPI lint, strict TypeScript compilation, and Node tests.
 - A local AWS persistence composition factory now assembles the concrete guest,
   account, Apple sign-in/link, save, offline-sync, economy, entitlement, and

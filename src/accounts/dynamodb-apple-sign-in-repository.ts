@@ -35,7 +35,7 @@ export class DynamoDbAppleSignInRepository implements Pick<AppleAccountRepositor
     try {
       await this.client.send(new TransactWriteCommand({ TransactItems: [
         { Put: { TableName: this.tableName, Item: {
-          pk: `PLAYER#${player.playerId}`, sk: "PROFILE", entityType: "Player", recordVersion: 1,
+          pk: `PLAYER#${player.playerId}`, sk: "PROFILE", entityType: "Player", recordVersion: 1, accountState: "active",
           ...player, displayName: null, locale: "und", linkedProviders: ["apple"],
         }, ConditionExpression: "attribute_not_exists(pk)" } },
         { Put: { TableName: this.tableName, Item: {
@@ -81,6 +81,7 @@ export class DynamoDbAppleSignInRepository implements Pick<AppleAccountRepositor
     const response = await this.client.send(new GetCommand({ TableName: this.tableName, Key: { pk: `PLAYER#${playerId}`, sk: "PROFILE" }, ConsistentRead: true }));
     const item = response.Item;
     if (item?.entityType !== "Player" || item.recordVersion !== 1 || item.playerId !== playerId ||
+        (item.accountState !== undefined && item.accountState !== "active") ||
         (item.accountKind !== "apple" && item.accountKind !== "google" && item.accountKind !== "guest") ||
         typeof item.createdAt !== "string" || (item.deletionState !== "active" && item.deletionState !== "requested" && item.deletionState !== "processing")) throw new Error("stored player is invalid");
     return { playerId, accountKind: item.accountKind, createdAt: item.createdAt, deletionState: item.deletionState };

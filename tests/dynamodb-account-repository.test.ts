@@ -46,6 +46,11 @@ test("DynamoDB account lookup is strongly consistent and maps only the selected 
   assert.deepEqual(command.input.Key, { pk: `PLAYER#${playerId}`, sk: "PROFILE" });
 });
 
+test("DynamoDB account lookup hides a merged profile from authentication", async () => {
+  const client = new ScriptedClient([{ Item: { ...profileItem(), accountState: "merged", mergedIntoPlayerId: "77777777-7777-4777-8777-777777777777" } }]);
+  assert.equal(await repository(client).getByPlayerId(playerId), undefined);
+});
+
 test("DynamoDB deletion atomically transitions profile, creates job, audit, and replay receipt", async () => {
   const client = new ScriptedClient([{}, { Item: profileItem() }, {}]);
   const receipt = await repository(client).requestDeletionWithAudit(input);
@@ -56,6 +61,7 @@ test("DynamoDB deletion atomically transitions profile, creates job, audit, and 
   const items = command.input.TransactItems;
   assert.equal(items?.length, 4);
   assert.equal(items?.[0]?.Update?.ConditionExpression?.includes("deletionState = :active"), true);
+  assert.equal(items?.[0]?.Update?.ConditionExpression?.includes("accountState"), true);
   assert.equal(items?.[1]?.Put?.Item?.pk, `DELETION#${playerId}`);
   assert.equal(items?.[2]?.Put?.Item?.action, "ACCOUNT_DELETION_REQUESTED");
   assert.equal(items?.[2]?.Put?.Item?.auditEventId, auditId);

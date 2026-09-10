@@ -14,6 +14,13 @@ Every item has `pk`, `sk`, `entityType`, and `recordVersion`. Timestamps are UTC
 RFC 3339 strings. Opaque UUIDs are immutable; email addresses, raw installation
 identifiers, provider tokens, and Apple credentials are never keys.
 
+Player profiles also have an internal `accountState` of `active` or `merged`.
+Legacy version-one profiles without the additive field are read as `active`;
+all new writers emit it. A `merged` profile is a minimal audit tombstone, is
+never accepted as an authenticated account, and records its surviving player
+only in protected storage. This internal lifecycle is not part of the public
+account or deletion-state contract.
+
 ## Keys and access patterns
 
 | Entity | `pk` | `sk` | Primary access pattern |

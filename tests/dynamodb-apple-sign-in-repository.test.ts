@@ -14,8 +14,13 @@ test("Apple sign-in atomically creates player, hashed mapping, and replay", asyn
   const writes = (client.commands[2] as TransactWriteCommand).input.TransactItems;
   assert.equal(writes?.length, 3);
   const mapping = writes?.[1]?.Put?.Item;
+  assert.equal(writes?.[0]?.Put?.Item?.accountState, "active");
   assert.match(String(mapping?.pk), /^PROVIDER#[a-f0-9]{64}#[a-f0-9]{64}$/);
   assert.equal(JSON.stringify(mapping).includes(input.subject), false);
+});
+test("Apple sign-in rejects a provider mapping that points at a merged profile", async () => {
+  const client = new Client([{}, { Item: { entityType: "ProviderMapping", recordVersion: 1, playerId } }, {}, { Item: { ...profile(), accountState: "merged" } }]);
+  await assert.rejects(repo(client).signInOrCreate(input), /stored player is invalid/);
 });
 test("Apple sign-in recovers an existing provider mapping", async () => {
   const client = new Client([{}, { Item: { entityType: "ProviderMapping", recordVersion: 1, playerId } }, {}, { Item: profile() }]);
