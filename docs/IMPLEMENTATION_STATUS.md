@@ -108,6 +108,12 @@ provisioned resources section below for identifiers.
   size, require JSON objects, and map network/status/type/parse failures to the
   generic content-unavailable boundary without logging response bodies. They are
   not configured in Lambda or deployed, and no content objects were uploaded.
+- Local content trust adapters now canonicalize bounded JSON-compatible values
+  deterministically, verify Ed25519 signatures against an injected public-key
+  ring, and enforce exact HTTPS origin/path policies for CDN downloads and
+  external links. Unknown keys, malformed signatures/documents, redirects,
+  credential-bearing URLs, and lookalike origins fail closed. No signing key or
+  private key was created, selected, or stored.
 - Catalog validation requires unique pack IDs, approved editorial status, valid
   checksums/sizes/build ranges, a matching environment channel, allowlisted CDN
   URLs, and at least one permanent starter pack.
