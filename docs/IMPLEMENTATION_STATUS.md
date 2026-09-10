@@ -254,6 +254,12 @@ provisioned resources section below for identifiers.
   well-formed revoked record. Audit records contain neither raw credentials nor
   credential hashes. This change is local only until a separately approved API
   Lambda code deployment.
+- Initial refresh-credential registration and every successful rotation now
+  append privacy-minimized `SESSION_CREDENTIAL_ISSUED` and
+  `SESSION_CREDENTIAL_ROTATED` audit events in the same DynamoDB transaction as
+  credential state. Audit records contain no token or credential hash. Initial
+  registration also recognizes DynamoDB transaction-cancellation conflicts and
+  strongly verifies the concurrent winner before accepting it.
 - A local `CognitoPlayerSessionRevoker` implements provider-wide account
   session invalidation with `AdminUserGlobalSignOut`. It validates the
   server-owned UUID username, treats a missing shadow user as idempotently

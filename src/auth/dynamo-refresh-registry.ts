@@ -45,8 +45,8 @@ export class DynamoRefreshRegistry implements RefreshCredentialRegistry {
     assertHash(input.credentialHash);
     try {
       await this.client.send(new TransactWriteCommand({
-        TransactItems: [{
-          Put: {
+        TransactItems: [
+          { Put: {
             TableName: this.tableName,
             Item: {
               pk: pk(input.credentialHash),
@@ -60,8 +60,13 @@ export class DynamoRefreshRegistry implements RefreshCredentialRegistry {
               ttl: toEpochSeconds(input.expiresAt),
             },
             ConditionExpression: "attribute_not_exists(pk)",
-          },
-        }],
+          } },
+          { Put: {
+            TableName: this.tableName,
+            Item: sessionAuditItem(input.playerId, input.now, "SESSION_CREDENTIAL_ISSUED", input.credentialHash),
+            ConditionExpression: "attribute_not_exists(pk) AND attribute_not_exists(sk)",
+          } },
+        ],
       }));
     } catch (error) {
       if (!isConditionalConflict(error)) throw error;
@@ -134,6 +139,13 @@ export class DynamoRefreshRegistry implements RefreshCredentialRegistry {
                 ttl: inheritedExpiresAtEpochSeconds,
               },
               ConditionExpression: "attribute_not_exists(pk)",
+            },
+          },
+          {
+            Put: {
+              TableName: this.tableName,
+              Item: sessionAuditItem(previous.playerId, input.now, "SESSION_CREDENTIAL_ROTATED", input.replacementCredentialHash),
+              ConditionExpression: "attribute_not_exists(pk) AND attribute_not_exists(sk)",
             },
           },
         ],
@@ -313,23 +325,32 @@ function sessionRevocationAuditItem(input: {
   readonly playerId: string;
   readonly now: Date;
 }): Record<string, unknown> {
-  const createdAt = input.now.toISOString();
-  const eventId = createAuditId(input.credentialHash);
+  return sessionAuditItem(input.playerId, input.now, "SESSION_CREDENTIAL_REVOKED", input.credentialHash);
+}
+
+function sessionAuditItem(
+  playerId: string,
+  now: Date,
+  action: "SESSION_CREDENTIAL_ISSUED" | "SESSION_CREDENTIAL_ROTATED" | "SESSION_CREDENTIAL_REVOKED",
+  credentialHash: string,
+): Record<string, unknown> {
+  const createdAt = now.toISOString();
+  const eventId = createAuditId(action, credentialHash);
   return {
-    pk: `PLAYER#${input.playerId}`,
+    pk: `PLAYER#${playerId}`,
     sk: `AUDIT#${createdAt}#${eventId}`,
     entityType: "AuditEvent",
     recordVersion: 1,
     auditEventId: eventId,
-    playerId: input.playerId,
-    action: "SESSION_CREDENTIAL_REVOKED",
+    playerId,
+    action,
     createdAt,
   };
 }
 
-function createAuditId(credentialHash: string): string {
+function createAuditId(action: string, credentialHash: string): string {
   return createHash("sha256")
-    .update(`session-revoked:${credentialHash}`, "utf8")
+    .update(`${action}:${credentialHash}`, "utf8")
     .digest("hex");
 }
 
@@ -344,7 +365,7 @@ function toEpochSeconds(date: Date): number {
 }
 
 function isConditionalConflict(error: unknown): boolean {
-  return isNamed(error, "ConditionalCheckFailedException");
+  return isNamed(error, "ConditionalCheckFailedException") || isNamed(error, "TransactionCanceledException");
 }
 
 function isTransactionConflict(error: unknown): boolean {

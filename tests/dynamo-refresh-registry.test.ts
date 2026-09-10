@@ -78,6 +78,11 @@ test("register stores only the credential hash, never the raw token", async () =
   assert.equal(JSON.stringify(item).includes(rawToken), false, "raw token must not appear in stored item");
   assert.ok((item["pk"] as string).includes(hash1), "pk must contain the hash");
   assert.equal(item["playerId"], playerId);
+  const audit = (client.commands[0] as TransactWriteCommand).input.TransactItems?.[1]?.Put?.Item;
+  assert.equal(audit?.["action"], "SESSION_CREDENTIAL_ISSUED");
+  assert.equal(audit?.["playerId"], playerId);
+  assert.equal(JSON.stringify(audit).includes(hash1), false);
+  assert.equal(JSON.stringify(audit).includes(rawToken), false);
 });
 
 // ---------------------------------------------------------------------------
@@ -102,6 +107,16 @@ test("register is idempotent when the record already exists for the same player"
     registry(client).register({ credentialHash: hash1, playerId, expiresAt, now }),
   );
   // Must have issued a GetCommand to verify the existing record.
+  assert.ok(client.commands[1] instanceof GetCommand);
+});
+
+test("register resolves a concurrent DynamoDB transaction cancellation", async () => {
+  const conflict = new Error("cancelled");
+  conflict.name = "TransactionCanceledException";
+  const client = new ScriptedClient([conflict, activeRecord()]);
+  await assert.doesNotReject(
+    registry(client).register({ credentialHash: hash1, playerId, expiresAt, now }),
+  );
   assert.ok(client.commands[1] instanceof GetCommand);
 });
 
@@ -172,7 +187,7 @@ test("rotate atomically revokes previous and writes replacement", async () => {
   assert.ok(client.commands[0] instanceof GetCommand);
   assert.ok(client.commands[1] instanceof TransactWriteCommand);
   const items = (client.commands[1] as TransactWriteCommand).input.TransactItems;
-  assert.equal(items?.length, 2);
+  assert.equal(items?.length, 3);
 
   // Issue 4: Update condition must include entityType, recordVersion, playerId,
   // expiresAtEpochSeconds, and active status.
@@ -189,6 +204,12 @@ test("rotate atomically revokes previous and writes replacement", async () => {
     "replacement must inherit previous expiry, not extend it");
   assert.equal(replacementItem?.["ttl"], expiresEpoch);
   assert.equal(replacementItem?.["playerId"], playerId);
+  const audit = items?.[2]?.Put?.Item;
+  assert.equal(audit?.["action"], "SESSION_CREDENTIAL_ROTATED");
+  assert.equal(audit?.["playerId"], playerId);
+  assert.equal(JSON.stringify(audit).includes(hash1), false);
+  assert.equal(JSON.stringify(audit).includes(hash2), false);
+  assert.equal(JSON.stringify(audit).includes(rawToken2), false);
 });
 
 test("rotate preserves original expiry when rotating near end of lifetime", async () => {
