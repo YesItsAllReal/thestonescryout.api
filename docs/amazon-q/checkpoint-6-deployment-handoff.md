@@ -241,8 +241,10 @@ Rollback phases:
 
 ## Remaining work
 
-- `SCO_APPLE_AUDIENCE`: blocked until `com.itsallrealministries.stonescryout`
-  is confirmed as Sign in with Apple-enabled in the Apple Developer portal.
+- Apple portal gate was satisfied on 2026-09-22: the owner confirmed
+  `com.itsallrealministries.stonescryout` is Sign in with Apple-enabled and is
+  the primary App ID. `SCO_APPLE_AUDIENCE` remains absent from the live Lambda;
+  setting it still requires a separately approved AWS mutation and smoke test.
 - `.amazonq/rules/sco-api-rules.md`: updated this session to reflect deployed state.
 - Smoke-test fixture cleanup: DynamoDB records from smoke tests require a
   separately approved targeted cleanup operation.

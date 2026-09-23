@@ -33,8 +33,10 @@ was skipped by owner decision; ItsAllRealAdmin was used directly for all phases.
   RetryGracePeriodSeconds=0
 - DynamoDB sco-dev-players: TTL ENABLED on attribute ttl
 - sco-dev-lambda-role policy: includes five Cognito admin actions
-- SCO_APPLE_AUDIENCE: NOT SET — Apple routes return 503 until Apple Developer portal confirms
-  com.itsallrealministries.stonescryout is Sign in with Apple-enabled
+- SCO_APPLE_AUDIENCE: NOT SET — Apple routes still return 503 in the live Lambda
+- Apple portal gate: SATISFIED 2026-09-22. The owner confirmed
+  com.itsallrealministries.stonescryout is Sign in with Apple-enabled and is the
+  primary App ID. This confirmation does not itself authorize an AWS mutation.
 
 ### Source and deployment boundary
 
@@ -110,9 +112,12 @@ energyCap=200 (for future signed remote configuration)
 
 ## Apple authentication gate
 
-SCO_APPLE_AUDIENCE=com.itsallrealministries.stonescryout is conditionally approved.
-Apple routes return 503 until the App ID is confirmed as Sign in with Apple-enabled
-in the Apple Developer portal. Do NOT set SCO_APPLE_AUDIENCE until confirmed.
+The owner confirmed on 2026-09-22 that
+com.itsallrealministries.stonescryout is Sign in with Apple-enabled and is the
+primary App ID. That exact value is the approved native iOS audience. Apple
+routes still return 503 because the live Lambda does not have
+SCO_APPLE_AUDIENCE set. Setting it requires a fresh, explicitly approved AWS
+configuration/deployment phase; portal confirmation alone is not approval.
 
 ## Architecture rules
 
@@ -121,7 +126,7 @@ in the Apple Developer portal. Do NOT set SCO_APPLE_AUDIENCE until confirmed.
 - All AWS CLI calls in scripts use Invoke-AwsChecked (scripts/aws-helpers.ps1)
   which throws on nonzero $LASTEXITCODE — never use bare & aws in deployment scripts
 - Lambda artifacts are CJS bundles produced by npm run bundle (esbuild)
-- npm run check must pass before any deployment (246 TS + 30 PS tests + lint)
+- npm run check must pass before any deployment (current baseline: 358 TS + 30 PS tests + lint)
 - npm run bundle must pass (both artifacts validated) before any Lambda deployment
 
 ## Deployment script locations

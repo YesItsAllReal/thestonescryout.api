@@ -1,7 +1,10 @@
 # Sign in with Apple verification
 
-Status: identity-token verifier implemented and validated locally; Apple
-platform registration, identifiers, and deployment configuration remain pending.
+Status: identity-token verifier implemented and validated locally. On
+2026-09-22 the owner confirmed that the explicit App ID
+`com.itsallrealministries.stonescryout` has Sign in with Apple enabled and is
+configured as the primary App ID. The live Lambda configuration and mobile
+network integration remain pending separately approved work.
 
 ## Verification boundary
 
@@ -27,10 +30,13 @@ verification. It is reserved for an approved Apple server exchange or credential
 revocation adapter. Apple private keys must be stored in an approved secret/key
 service and never in source or plaintext Lambda environment variables.
 
-## Deployment inputs still required
+## Confirmed deployment input
 
-- Apple bundle ID or Services ID for each backend environment.
-- Exact audience value for each environment.
+- Native iOS App ID and exact development audience:
+  `com.itsallrealministries.stonescryout`.
+
+## Inputs still required only for later capabilities
+
 - Apple developer team/key identifiers and private-key storage approach if an
   authorization-code or revocation integration is enabled.
 - Confirmation that the iOS nonce implementation follows the raw/digest

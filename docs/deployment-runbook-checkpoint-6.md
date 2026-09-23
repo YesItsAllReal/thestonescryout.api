@@ -1,7 +1,8 @@
 # Checkpoint 6 deployment runbook -- dev environment
 
-Status: PLANNING ONLY. No step has been executed.
-Each phase requires separate explicit owner approval before execution.
+Status: historical Phases 1–3 were deployed on 2026-09-08; later local changes
+are not live unless the implementation status and a fresh read-only comparison
+say otherwise. Every additional phase requires separate explicit owner approval.
 
 AWS account: 598628878271  Region: us-east-1
 Trusted-administrator profile: ItsAllRealAdmin (non-root IAM user, not root)
@@ -13,10 +14,11 @@ Approved economy values (trusted server configuration, never from client):
 Future signed remote configuration must use:
   startingCoins=200  startingGems=20  startingEnergy=200  energyCap=200
 
-Apple authentication gate: SCO_APPLE_AUDIENCE is omitted from Phase 3c until
-com.itsallrealministries.stonescryout is confirmed as Sign in with Apple-enabled
-in the Apple Developer portal. The Lambda starts normally without it; Apple
-routes return 503 until the variable is set and confirmed.
+Apple portal gate: satisfied on 2026-09-22. The owner confirmed
+com.itsallrealministries.stonescryout is Sign in with Apple-enabled and is the
+primary App ID. SCO_APPLE_AUDIENCE remains absent from the live Lambda, so Apple
+routes continue to return 503. Adding it is a new configuration mutation and
+requires its own preflight, approval, rollback snapshot, deployment, and smoke test.
 
 ---
 
@@ -393,7 +395,9 @@ Write-Host "Phase 3b complete."
 
 # 3c. Update Lambda handler and set environment variables atomically.
 # Handler must change from src/lambda/index.handler to api.handler.
-# SCO_APPLE_AUDIENCE is intentionally omitted until Apple Developer portal confirmation.
+# Historical initial deployment: SCO_APPLE_AUDIENCE was intentionally omitted.
+# Do not reuse this block for activation; preserve the live environment exactly
+# and add only the separately approved audience value.
 $envVars = "Variables={SCO_ENVIRONMENT=development," +
   "SCO_PLAYER_TABLE_NAME=sco-dev-players," +
   "SCO_TOKEN_ISSUER=https://cognito-idp.us-east-1.amazonaws.com/us-east-1_SDheytSys," +
@@ -462,7 +466,7 @@ foreach ($v in $requiredVars) {
     }
 }
 if ($env.PSObject.Properties["SCO_APPLE_AUDIENCE"]) {
-    Write-Error "SCO_APPLE_AUDIENCE must not be set until Apple Developer portal is confirmed. STOP."
+    Write-Error "Historical Phase 3 assertion expected SCO_APPLE_AUDIENCE to be absent. STOP."
     exit 1
 }
 Write-Host "Phase 3d complete. All deployment assertions passed."
@@ -559,7 +563,9 @@ Write-Host "Rollback verified: Handler=$($cfg.Handler)"
 ## Runbook accuracy notes
 
 - Apple routes are ACTIVE when SCO_APPLE_AUDIENCE is set; 503 when absent.
-  Phase 3c omits it until Apple Developer portal confirmation is recorded.
+  Historical Phase 3c omitted it. The portal gate was satisfied on 2026-09-22;
+  activation must use a new configuration-only phase that snapshots and
+  preserves the complete live environment before adding the confirmed audience.
 - Lambda artifacts are CJS bundles with all runtime dependencies included.
   Handler paths: api.handler (api.zip) and cognito-triggers.handler (cognito-triggers.zip).
 - All AWS CLI calls use Invoke-AwsChecked which stops on nonzero $LASTEXITCODE.

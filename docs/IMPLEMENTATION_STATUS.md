@@ -330,9 +330,10 @@ provisioned resources section below for identifiers.
   remain explicit 503 responses. This read route is not live until a separately
   approved API Lambda code deployment.
 - SCO_APPLE_AUDIENCE is optional at Lambda startup. When absent, Apple
-  sign-in routes return 503 and all other routes function normally. Apple
-  deployment remains blocked until com.itsallrealministries.stonescryout is
-  confirmed as Sign in with Apple-enabled in the Apple Developer portal.
+  sign-in routes return 503 and all other routes function normally. On
+  2026-09-22 the owner confirmed `com.itsallrealministries.stonescryout` is
+  Sign in with Apple-enabled and is the primary App ID. The live variable
+  remains absent pending a separately approved configuration deployment.
 - Lambda artifacts are produced by npm run bundle (esbuild CJS + package + validate).
   Both runtime dependencies (jose, AWS SDK) and application code are bundled
   into self-contained CJS files. Artifact validation runs a child Node process
@@ -354,8 +355,9 @@ provisioned resources section below for identifiers.
 - The following changes are planned but not yet applied to AWS:
   - Identity Center setup and ScoDevOperator permission set (skipped for
     single-developer machine; ItsAllRealAdmin used directly).
-  - Apple authentication deployment blocked until Apple Developer portal
-    confirmation is recorded. SCO_APPLE_AUDIENCE must not be set until then.
+  - Apple portal confirmation is recorded. Adding
+    `SCO_APPLE_AUDIENCE=com.itsallrealministries.stonescryout` to the live
+    Lambda remains a separately approved AWS configuration deployment.
 
 ## Checkpoint 6 closure audit
 
@@ -378,9 +380,10 @@ and both Lambda artifact checks. The following behaviors deliberately fail close
    verification, URL policy, and validation exist locally. Activation needs an
    approved public signing key, signed objects, and environment URLs; no key or
    object has been created.
-5. Apple sign-in/link: contract and concrete verification/persistence exist, but
-   remain disabled until the Apple Developer portal confirms the bundle audience
-   and `SCO_APPLE_AUDIENCE` is separately approved for deployment.
+5. Apple sign-in/link: contract and concrete verification/persistence exist and
+   the portal/audience gate is confirmed. They remain disabled until
+   `SCO_APPLE_AUDIENCE=com.itsallrealministries.stonescryout` is separately
+   approved for deployment and exercised by the nonce-enabled iOS client.
 6. Account-link conflict reconciliation is locally implemented, but activation
    requires a trusted content version and an approved backfill of origin fields
    for any legacy balances created before this additive migration.
