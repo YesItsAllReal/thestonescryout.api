@@ -121,6 +121,20 @@ scans. New indexes require a documented access pattern before deployment.
   domain models. Writers emit only the current version.
 - Additive migrations are preferred. Backfills are resumable, idempotent, and
   checkpointed; they never depend on a single full-table scan completing.
+- The pending development balance-origin backfill must first inventory every
+  `Balance` record and its ledger history without printing player identifiers or
+  balances. Because economy mutation routes have never been live, setting each
+  missing origin to its conditionally matched current balance is a candidate
+  development-only rule, not an assumed production rule. It still requires an
+  owner-approved read-only inventory and mutation plan.
+- Each origin backfill write must require the exact player key, record version,
+  revision, current coins/gems/energy, and absence of all three origin fields.
+  It must set all three origins together, stamp a migration version, never
+  overwrite an existing origin, and support bounded resumable batches. Rows with
+  ledger history or partial origin fields fail closed for manual review.
+- Account-link reconciliation remains disabled until the backfill is verified
+  complete and `SCO_ACCOUNT_LINK_CONTENT_VERSION` is set to an owner-approved
+  content version matching the client state being reconciled.
 - Destructive shape changes use expand/migrate/verify/contract. The contract step
   occurs only after all deployed readers no longer require the old attributes.
 - Golden fixtures cover every supported historical version before a migration is

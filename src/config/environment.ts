@@ -17,6 +17,8 @@ export interface RuntimeConfiguration {
   readonly guestStartingEnergy: number;
   readonly accountLinkContentVersion: string | undefined;
   readonly accountDeletionEnabled: boolean;
+  readonly economyReadEnabled: boolean;
+  readonly entitlementsReadEnabled: boolean;
 }
 
 export class EnvironmentConfigurationError extends Error {}
@@ -104,6 +106,8 @@ export function loadRuntimeConfiguration(
     : undefined;
   const accountLinkContentVersion=optionalIdentifier(environment,"SCO_ACCOUNT_LINK_CONTENT_VERSION",64);
   const accountDeletionEnabled=optionalBoolean(environment,"SCO_ACCOUNT_DELETION_ENABLED");
+  const economyReadEnabled=optionalBoolean(environment,"SCO_ECONOMY_READ_ENABLED");
+  const entitlementsReadEnabled=optionalBoolean(environment,"SCO_ENTITLEMENTS_READ_ENABLED");
   if(accountDeletionEnabled&&appleAudience===undefined)throw new EnvironmentConfigurationError("SCO_ACCOUNT_DELETION_ENABLED requires SCO_APPLE_AUDIENCE");
 
   return {
@@ -120,6 +124,8 @@ export function loadRuntimeConfiguration(
     guestStartingEnergy,
     accountLinkContentVersion,
     accountDeletionEnabled,
+    economyReadEnabled,
+    entitlementsReadEnabled,
   };
 }
 

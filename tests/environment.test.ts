@@ -36,6 +36,8 @@ test("runtime configuration loads all fields correctly", () => {
     guestStartingEnergy: 40,
     accountLinkContentVersion: undefined,
     accountDeletionEnabled: false,
+    economyReadEnabled: false,
+    entitlementsReadEnabled: false,
   });
 });
 
@@ -175,5 +177,6 @@ test("accepts zero starting balances", () => {
 });
 
 test("optional account-link content version and deletion flag load safely",()=>{const config=loadRuntimeConfiguration({...VALID,SCO_ACCOUNT_LINK_CONTENT_VERSION:"starter-1",SCO_ACCOUNT_DELETION_ENABLED:"true"});assert.equal(config.accountLinkContentVersion,"starter-1");assert.equal(config.accountDeletionEnabled,true);});
+test("optional read-route rollout gates default off and require exact booleans",()=>{const defaults=loadRuntimeConfiguration(VALID);assert.equal(defaults.economyReadEnabled,false);assert.equal(defaults.entitlementsReadEnabled,false);const enabled=loadRuntimeConfiguration({...VALID,SCO_ECONOMY_READ_ENABLED:"true",SCO_ENTITLEMENTS_READ_ENABLED:"true"});assert.equal(enabled.economyReadEnabled,true);assert.equal(enabled.entitlementsReadEnabled,true);assert.throws(()=>loadRuntimeConfiguration({...VALID,SCO_ECONOMY_READ_ENABLED:"1"}),/true or false/);assert.throws(()=>loadRuntimeConfiguration({...VALID,SCO_ENTITLEMENTS_READ_ENABLED:"yes"}),/true or false/);});
 test("account deletion cannot be enabled without Apple federation",()=>{const {SCO_APPLE_AUDIENCE:_,...withoutApple}=VALID;assert.throws(()=>loadRuntimeConfiguration({...withoutApple,SCO_ACCOUNT_DELETION_ENABLED:"true"}),/requires SCO_APPLE_AUDIENCE/);});
 test("invalid optional activation values fail closed",()=>{assert.throws(()=>loadRuntimeConfiguration({...VALID,SCO_ACCOUNT_DELETION_ENABLED:"yes"}));assert.throws(()=>loadRuntimeConfiguration({...VALID,SCO_ACCOUNT_LINK_CONTENT_VERSION:"unsafe/value"}));});

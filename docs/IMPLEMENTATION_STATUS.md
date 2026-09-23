@@ -1,6 +1,6 @@
 # Checkpoint 6 implementation status
 
-Last verified: 2026-09-10
+Last verified: 2026-09-23
 
 Architecture: AWS serverless/DynamoDB is approved by ADR 0001. Dev environment
 resources have been provisioned in us-east-1 (account 598628878271). See the
@@ -287,6 +287,12 @@ provisioned resources section below for identifiers.
   when a trusted account-link content version is injected. Balance reconciliation
   proves origin plus ledger history and fails closed on legacy balance rows until
   their origin fields receive an explicitly approved backfill.
+- Reconciliation readiness now also retires a guest-owned unlock when the
+  survivor already owns the same unlock, without overwriting the survivor's
+  record. Non-conditional DynamoDB transaction cancellations propagate as
+  service failures instead of being misreported as concurrency conflicts.
+  Offline coverage explicitly verifies both save choices, shared-unlock cleanup,
+  legacy-origin failure, and conditional-winner recovery.
 - Account deletion no longer depends on Lambda stubs locally. When both Apple
   audience configuration and the disabled-by-default
   `SCO_ACCOUNT_DELETION_ENABLED=true` gate are present, the identity factory
@@ -295,12 +301,16 @@ provisioned resources section below for identifiers.
   deletion handler. The live gate remains off; activation requires Apple portal
   confirmation, the additional IAM permission, deployment approval, and smoke
   testing.
+- Deletion retry coverage proves that a provider revocation failure occurs only
+  after the durable deletion state and audit event exist, and that an identical
+  retry resumes revocation without duplicating the audit record.
 - A local Apple account-deletion authorizer now requires a fresh verified Apple
   assertion and a strongly consistent hashed provider-mapping lookup that must
   resolve to the authenticated player. Guest sessions, missing proofs,
   cross-player identities, malformed mappings, and provider/store failures all
-  fail through the same privacy-safe authorization boundary. It remains
-  unwired while `SCO_APPLE_AUDIENCE` is intentionally absent.
+  fail through the same privacy-safe authorization boundary. The newer deletion
+  composition remains undeployed and disabled; the deployed build exposes only
+  the separately activated sign-in/link behavior.
 - The DynamoDB economy implementation now has a pure, offline-tested atomic
   transaction builder. A balance compare-and-set, one immutable ledger item per
   normalized resource mutation, optional verified-grant claim, and hashed
@@ -329,11 +339,23 @@ provisioned resources section below for identifiers.
   deterministic product-ID ordering. Purchase and notification mutation routes
   remain explicit 503 responses. This read route is not live until a separately
   approved API Lambda code deployment.
+- The newer economy and entitlement read routes now have independent strict
+  environment rollout gates (`SCO_ECONOMY_READ_ENABLED` and
+  `SCO_ENTITLEMENTS_READ_ENABLED`) that default to false. A future reconciliation
+  code deployment therefore cannot silently activate either read route.
 - SCO_APPLE_AUDIENCE is optional at Lambda startup. When absent, Apple
   sign-in routes return 503 and all other routes function normally. On
   2026-09-22 the owner confirmed `com.itsallrealministries.stonescryout` is
-  Sign in with Apple-enabled and is the primary App ID. The live variable
-  remains absent pending a separately approved configuration deployment.
+  Sign in with Apple-enabled and is the primary App ID. A separately approved
+  configuration-only update then added that exact audience to `sco-dev-api`,
+  preserving its code hash and all original environment values. Health returned
+  200, malformed Apple input returned 400 rather than 503, unauthenticated link
+  returned 401, and privacy-safe log inspection passed. The protected TestFlight
+  workflow and provisioning entitlement checks subsequently passed, and the
+  owner completed a successful real-device Apple sign-in on 2026-09-23.
+  The backend returned a valid session, the iOS app retained only the backend
+  session in Keychain, and Cloud Backup remained connected after force-quit and
+  relaunch. Conflict reconciliation was not exercised.
 - Lambda artifacts are produced by npm run bundle (esbuild CJS + package + validate).
   Both runtime dependencies (jose, AWS SDK) and application code are bundled
   into self-contained CJS files. Artifact validation runs a child Node process
@@ -355,24 +377,22 @@ provisioned resources section below for identifiers.
 - The following changes are planned but not yet applied to AWS:
   - Identity Center setup and ScoDevOperator permission set (skipped for
     single-developer machine; ItsAllRealAdmin used directly).
-  - Apple portal confirmation is recorded. Adding
-    `SCO_APPLE_AUDIENCE=com.itsallrealministries.stonescryout` to the live
-    Lambda remains a separately approved AWS configuration deployment.
+  - No remaining Apple audience change: the confirmed audience is now live.
 
 ## Checkpoint 6 closure audit
 
 Checkpoint 6 is not yet closed end to end. Its contract, persistence, security,
 and offline-test foundations are substantially implemented. The current local
-tree passes 358/358 TypeScript tests, 30/30 PowerShell tests, OpenAPI validation,
+tree passes 364/364 TypeScript tests, 30/30 PowerShell tests, OpenAPI validation,
 and both Lambda artifact checks. The following behaviors deliberately fail closed:
 
 1. `POST /v1/sync/commands`: DynamoDB persistence and deterministic envelope
    validation exist, but authoritative game-command execution rules must come
    from the shared game domain before replay can safely mutate saves or economy.
 2. `DELETE /v1/account`: durable deletion state, audit, Apple reauthentication,
-   and Cognito global-sign-out adapters exist locally. Composition is blocked on
-   Apple audience confirmation; deployment also needs separately approved
-   `cognito-idp:AdminUserGlobalSignOut` permission.
+   and Cognito global-sign-out adapters exist locally. The deployed build still
+   keeps deletion statically unavailable; activation needs a newer code
+   deployment and separately approved `cognito-idp:AdminUserGlobalSignOut` permission.
 3. `POST /v1/spend` and `POST /v1/rewards/claim`: the atomic economy ledger and
    fail-closed policy boundaries exist. Activation needs the complete approved
    action/reference price table and a concrete reward-evidence verifier.
@@ -380,11 +400,7 @@ and both Lambda artifact checks. The following behaviors deliberately fail close
    verification, URL policy, and validation exist locally. Activation needs an
    approved public signing key, signed objects, and environment URLs; no key or
    object has been created.
-5. Apple sign-in/link: contract and concrete verification/persistence exist and
-   the portal/audience gate is confirmed. They remain disabled until
-   `SCO_APPLE_AUDIENCE=com.itsallrealministries.stonescryout` is separately
-   approved for deployment and exercised by the nonce-enabled iOS client.
-6. Account-link conflict reconciliation is locally implemented, but activation
+5. Account-link conflict reconciliation is locally implemented, but activation
    requires a trusted content version and an approved backfill of origin fields
    for any legacy balances created before this additive migration.
 
@@ -395,8 +411,9 @@ to Checkpoint 7 and does not block Checkpoint 6 closure.
 
 1. Integrate the shared deterministic game-command executor when its command and
    content rules are available from the primary app/shared domain.
-2. Complete the owner/provider-gated Apple, deletion, economy-mutation, and
-   signed-content activation steps listed above.
+2. Complete the remaining deletion, economy-mutation, signed-content, and
+   account-link reconciliation activation steps listed above. Native Apple
+   sign-in acceptance is complete.
 
 ## Provisioned dev environment (us-east-1, account 598628878271)
 
@@ -412,7 +429,9 @@ All resources use the `sco-dev-` prefix and are fully isolated from existing
   TTL enabled on attribute `ttl`.
 - Lambda function: `sco-dev-api` — Node 22, arm64, 512 MB, 10 s, handler
   `api.handler`. Wired with concrete Cognito and DynamoDB adapters.
-  Ten required environment variables set. SCO_APPLE_AUDIENCE absent.
+  Eleven environment variables set, including the confirmed
+  SCO_APPLE_AUDIENCE. Account deletion and reconciliation activation variables
+  remain absent.
 - Lambda function: `sco-dev-cognito-triggers` — Node 22, arm64, 128 MB, 5 s,
   handler `cognito-triggers.handler`. Dispatches DefineAuth, CreateAuth,
   VerifyAuth triggers. JSON log format, /sco/dev/cognito-triggers log group.

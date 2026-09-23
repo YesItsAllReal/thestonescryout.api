@@ -3,8 +3,12 @@
 Status: identity-token verifier implemented and validated locally. On
 2026-09-22 the owner confirmed that the explicit App ID
 `com.itsallrealministries.stonescryout` has Sign in with Apple enabled and is
-configured as the primary App ID. The live Lambda configuration and mobile
-network integration remain pending separately approved work.
+configured as the primary App ID. A configuration-only update activated that
+audience in the development Lambda on the same date without changing code or
+other settings. Unsigned iOS CI passed, the protected TestFlight workflow and
+provisioning entitlement checks passed, and the owner completed a successful
+real-device Apple sign-in on 2026-09-23. Conflict reconciliation remains a
+separate undeployed path.
 
 ## Verification boundary
 

@@ -16,9 +16,11 @@ Future signed remote configuration must use:
 
 Apple portal gate: satisfied on 2026-09-22. The owner confirmed
 com.itsallrealministries.stonescryout is Sign in with Apple-enabled and is the
-primary App ID. SCO_APPLE_AUDIENCE remains absent from the live Lambda, so Apple
-routes continue to return 503. Adding it is a new configuration mutation and
-requires its own preflight, approval, rollback snapshot, deployment, and smoke test.
+primary App ID. A separately approved configuration-only update added the exact
+audience to the live Lambda on 2026-09-22 while preserving code and the original
+10 environment values. Apple sign-in/link routes are active in development;
+protected TestFlight and provisioning checks passed, followed by successful
+real-device Apple sign-in acceptance on 2026-09-23.
 
 ---
 

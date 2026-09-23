@@ -42,12 +42,28 @@ test("preferring guest save conditionally replaces only survivor save and preser
  assert.equal(save.ConditionExpression?.includes("revision = :revision"),true);
 });
 
+test("preferring existing save preserves it without writing guest board data",()=>{
+ const items=command("preferExistingSave").input.TransactItems!;
+ assert.equal(items.some(x=>x.Put?.Item?.entityType==="Save"),false);
+ const survivorCheck=items.find(x=>x.ConditionCheck?.Key?.pk===`PLAYER#${survivor}`&&x.ConditionCheck.Key?.sk==="SAVE#primary")?.ConditionCheck;
+ assert.equal(survivorCheck?.ExpressionAttributeValues?.[":revision"],4);
+ assert.equal(JSON.stringify(items).includes('"board":"guest"'),false);
+});
+
 test("transaction transfers guest entitlement and unlock ownership with conditional source removal",()=>{
  const items=command().input.TransactItems!;
  assert.equal(items.some(x=>x.Delete?.Key?.sk==="ENTITLEMENT#pack.archive"),true);
  assert.equal(items.some(x=>x.Put?.Item?.pk===`PLAYER#${survivor}`&&x.Put.Item?.sk==="ENTITLEMENT#pack.archive"),true);
  assert.equal(items.some(x=>x.Update?.Key?.pk==="TRANSACTION#sandbox#tx-1"&&x.Update.UpdateExpression?.includes("playerId = :survivorId")),true);
  assert.equal(items.some(x=>x.Delete?.Key?.sk==="UNLOCK#archive-1"),true);
+});
+
+test("a shared unlock deletes only the guest duplicate and preserves the survivor record",()=>{
+ const duplicateState={...state,guestUnlockIds:["shared"],existingUnlockIds:["shared"]};
+ const plan=planAccountLinkReconciliation(duplicateState,"preferExistingSave",new LedgerReconciliationPolicy());
+ const items=buildAccountLinkTransaction({tableName:"players",conflictId:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",providerPk:`PROVIDER#${"d".repeat(64)}#${"e".repeat(64)}`,choice:"preferExistingSave",idempotencyKey:"link-resolution-1001",now,clientBuild:42,contentVersion:"starter-1",auditEventId:"audit-1",ledgerEntryIds:["ledger-1","ledger-2","ledger-3"],state:duplicateState,plan}).input.TransactItems!;
+ assert.equal(items.filter(x=>x.Delete?.Key?.pk===`PLAYER#${guest}`&&x.Delete.Key?.sk==="UNLOCK#shared").length,1);
+ assert.equal(items.some(x=>x.Put?.Item?.pk===`PLAYER#${survivor}`&&x.Put.Item?.sk==="UNLOCK#shared"),false);
 });
 
 test("transaction hashes replay keys and records a bounded reconciliation audit",()=>{

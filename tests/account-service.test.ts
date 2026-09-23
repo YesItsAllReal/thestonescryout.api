@@ -42,6 +42,14 @@ class CapturingRevoker implements PlayerSessionRevoker {
   }
 }
 
+class FailsOnceRevoker implements PlayerSessionRevoker {
+  public attempts = 0;
+  public async revokeAll(): Promise<void> {
+    this.attempts++;
+    if (this.attempts === 1) throw new Error("opaque provider failure");
+  }
+}
+
 test("account lookup is always scoped to the authenticated principal", async () => {
   const repository = new MemoryAccountRepository();
   repository.add(profile);
@@ -80,6 +88,27 @@ test("replaying account deletion does not create another audit event", async () 
   const first = await service.requestDeletion(input);
   const replay = await service.requestDeletion(input);
   assert.deepEqual(replay, first);
+  assert.equal(repository.auditEvents.length, 1);
+});
+
+test("a revocation failure leaves a durable deletion request that a retry can resume", async () => {
+  const repository = new MemoryAccountRepository();
+  repository.add(profile);
+  const revoker = new FailsOnceRevoker();
+  const service = new AccountService(repository, new AllowDeletion(), revoker, now);
+  const input = {
+    principal,
+    request: { confirmation: "deleteAccount" as const },
+    idempotencyKey: "account-delete-resume-0001",
+  };
+
+  await assert.rejects(service.requestDeletion(input), /opaque provider failure/);
+  assert.equal((await service.getProfile(principal)).deletionState, "requested");
+  assert.equal(repository.auditEvents.length, 1);
+
+  const receipt = await service.requestDeletion(input);
+  assert.deepEqual(receipt, { deletionState: "requested", requestedAt: now().toISOString() });
+  assert.equal(revoker.attempts, 2);
   assert.equal(repository.auditEvents.length, 1);
 });
 

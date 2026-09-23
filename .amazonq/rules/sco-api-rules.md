@@ -33,7 +33,10 @@ was skipped by owner decision; ItsAllRealAdmin was used directly for all phases.
   RetryGracePeriodSeconds=0
 - DynamoDB sco-dev-players: TTL ENABLED on attribute ttl
 - sco-dev-lambda-role policy: includes five Cognito admin actions
-- SCO_APPLE_AUDIENCE: NOT SET — Apple routes still return 503 in the live Lambda
+- SCO_APPLE_AUDIENCE: SET on 2026-09-22 to the confirmed native iOS audience;
+  Apple sign-in and ordinary linking routes are active in development
+- Apple acceptance: protected TestFlight and provisioning checks passed; owner
+  completed a successful real-device sign-in on 2026-09-23
 - Apple portal gate: SATISFIED 2026-09-22. The owner confirmed
   com.itsallrealministries.stonescryout is Sign in with Apple-enabled and is the
   primary App ID. This confirmation does not itself authorize an AWS mutation.
@@ -114,10 +117,15 @@ energyCap=200 (for future signed remote configuration)
 
 The owner confirmed on 2026-09-22 that
 com.itsallrealministries.stonescryout is Sign in with Apple-enabled and is the
-primary App ID. That exact value is the approved native iOS audience. Apple
-routes still return 503 because the live Lambda does not have
-SCO_APPLE_AUDIENCE set. Setting it requires a fresh, explicitly approved AWS
-configuration/deployment phase; portal confirmation alone is not approval.
+primary App ID. That exact value is the approved native iOS audience. On
+2026-09-22 one configuration-only update added SCO_APPLE_AUDIENCE to
+sco-dev-api while preserving its original 10 environment values and code hash.
+Do not remove or change it without a fresh, explicitly approved AWS phase.
+The first protected TestFlight real-device sign-in passed on 2026-09-23. The
+backend session survived force-quit/relaunch and Cloud Backup remained connected;
+only the backend session is intentionally persisted by the app.
+Account-link conflict reconciliation is still not deployed; do not infer that
+the successful ordinary sign-in exercised that path.
 
 ## Architecture rules
 
@@ -126,7 +134,7 @@ configuration/deployment phase; portal confirmation alone is not approval.
 - All AWS CLI calls in scripts use Invoke-AwsChecked (scripts/aws-helpers.ps1)
   which throws on nonzero $LASTEXITCODE — never use bare & aws in deployment scripts
 - Lambda artifacts are CJS bundles produced by npm run bundle (esbuild)
-- npm run check must pass before any deployment (current baseline: 358 TS + 30 PS tests + lint)
+- npm run check must pass before any deployment (current baseline: 364 TS + 30 PS tests + lint)
 - npm run bundle must pass (both artifacts validated) before any Lambda deployment
 
 ## Deployment script locations

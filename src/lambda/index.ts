@@ -133,8 +133,12 @@ const appHandler = createApiRouter({
     { method: "GET",    path: "/v1/account",         handler: createGetAccountHandler(identity.account, authDeps) },
     { method: "GET",    path: "/v1/save",            handler: createGetSaveHandler(identity.save, authDeps) },
     { method: "PUT",    path: "/v1/save",            handler: createPutSaveHandler(identity.save, authDeps) },
-    { method: "GET",    path: "/v1/economy",         handler: createGetEconomyHandler(economy, authDeps) },
-    { method: "GET",    path: "/v1/entitlements",    handler: createGetEntitlementsHandler(entitlement, authDeps) },
+    { method: "GET",    path: "/v1/economy",         handler: config.economyReadEnabled
+        ? createGetEconomyHandler(economy, authDeps)
+        : authenticatedNotAvailable("GET /v1/economy") },
+    { method: "GET",    path: "/v1/entitlements",    handler: config.entitlementsReadEnabled
+        ? createGetEntitlementsHandler(entitlement, authDeps)
+        : authenticatedNotAvailable("GET /v1/entitlements") },
 
     // Not yet deployed — explicit 503 with appropriate access control.
     { method: "DELETE", path: "/v1/account",                 handler: identity.accountDeletionEnabled
