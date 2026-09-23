@@ -1,3 +1,7 @@
 Keep this open to see tabs.
 
+API chat
 ChatGPT Conversation "Connect project to GitHub"
+
+OS chat
+ChatGPT Conversation "Start iOS MVP delivery proof"
