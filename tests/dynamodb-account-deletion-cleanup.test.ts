@@ -72,6 +72,8 @@ test("completion removes the hashed provider mapping and leaves only a TTL compl
   const tx = (client.commands[3] as TransactWriteCommand).input.TransactItems!;
   assert.equal(tx[0]?.Delete?.Key?.pk, `PROVIDER#${"a".repeat(64)}#${"b".repeat(64)}`);
   assert.equal(tx[1]?.Update?.UpdateExpression?.includes("REMOVE scanCursor, providerMappingPk, providerMappingSk"), true);
+  assert.equal(tx[1]?.Update?.UpdateExpression?.includes("#ttl = :ttl"), true);
+  assert.equal(tx[1]?.Update?.ExpressionAttributeNames?.["#ttl"], "ttl");
   assert.equal(tx[1]?.Update?.ExpressionAttributeValues?.[":ttl"], Math.floor(now.getTime() / 1000) + 2_592_000);
 });
 

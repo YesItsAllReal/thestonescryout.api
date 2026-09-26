@@ -171,9 +171,9 @@ export class DynamoDbAccountDeletionCleanup implements AccountDeletionCleanupRep
     actions.push({ Update: {
       TableName: this.tableName,
       Key: jobKey(playerId),
-      UpdateExpression: "SET #state = :completed, retentionId = :retentionId, completedAt = :at, ttl = :ttl REMOVE scanCursor, providerMappingPk, providerMappingSk",
+      UpdateExpression: "SET #state = :completed, retentionId = :retentionId, completedAt = :at, #ttl = :ttl REMOVE scanCursor, providerMappingPk, providerMappingSk",
       ConditionExpression: "entityType = :type AND recordVersion = :version AND playerId = :playerId AND (#state = :requested OR #state = :processing)",
-      ExpressionAttributeNames: { "#state": "state" },
+      ExpressionAttributeNames: { "#state": "state", "#ttl": "ttl" },
       ExpressionAttributeValues: {
         ":completed": "completed", ":retentionId": retentionId, ":at": now.toISOString(),
         ":ttl": Math.floor(now.getTime() / 1000) + this.completedJobTtlSeconds,
