@@ -30,7 +30,7 @@ export async function handler(event: unknown): Promise<
     try {
       if (record.state === "requested" || record.state === "processing") await worker.run(record.playerId);
     } catch {
-      failures.push({ itemIdentifier: record.eventId });
+      failures.push({ itemIdentifier: record.itemIdentifier });
     }
   }
   return { batchItemFailures: failures };
