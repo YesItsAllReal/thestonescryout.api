@@ -20,8 +20,11 @@ test("fresh verified Apple identity authorizes deletion only for its mapped play
   const authorizer = new AppleAccountDeletionAuthorizer(verifier(), {
     async resolvePlayerId(value) { resolved = value; return playerId; },
   });
-  await assert.doesNotReject(authorizer.authorize({ principal, proof, now }));
+  const authorization = await authorizer.authorize({ principal, proof, now });
   assert.deepEqual(resolved, identity);
+  assert.match(authorization.providerMappingKey.pk, /^PROVIDER#[a-f0-9]{64}#[a-f0-9]{64}$/);
+  assert.equal(authorization.providerMappingKey.sk, "PLAYER");
+  assert.equal(JSON.stringify(authorization).includes(identity.subject), false);
 });
 
 test("guest sessions and missing or malformed proofs fail before verification", async () => {

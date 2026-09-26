@@ -304,6 +304,16 @@ provisioned resources section below for identifiers.
 - Deletion retry coverage proves that a provider revocation failure occurs only
   after the durable deletion state and audit event exist, and that an identical
   retry resumes revocation without duplicating the audit record.
+- The local asynchronous deletion worker now has a separately bundled internal
+  Lambda entry point. Successful Apple reauthentication passes only the derived
+  hashed provider key into the durable job. Bounded atomic steps erase the
+  player partition, delete transient global credentials/replays, anonymize only
+  purchase and verified-fraud records under a random retention ID, remove the
+  Apple and installation mappings, and leave a 30-day TTL completion marker.
+  Unknown future entity types fail closed. Worker retries and transaction
+  failures cannot advance the job independently of their data mutation. No
+  worker Lambda, DynamoDB stream/event source, IAM change, or live destructive test has
+  been created or run.
 - A local Apple account-deletion authorizer now requires a fresh verified Apple
   assertion and a strongly consistent hashed provider-mapping lookup that must
   resolve to the authenticated player. Guest sessions, missing proofs,
@@ -383,16 +393,17 @@ provisioned resources section below for identifiers.
 
 Checkpoint 6 is not yet closed end to end. Its contract, persistence, security,
 and offline-test foundations are substantially implemented. The current local
-tree passes 364/364 TypeScript tests, 30/30 PowerShell tests, OpenAPI validation,
-and both Lambda artifact checks. The following behaviors deliberately fail closed:
+tree passes 377/377 TypeScript tests, 30/30 PowerShell tests, OpenAPI validation,
+and all three Lambda artifact checks. The following behaviors deliberately fail closed:
 
 1. `POST /v1/sync/commands`: DynamoDB persistence and deterministic envelope
    validation exist, but authoritative game-command execution rules must come
    from the shared game domain before replay can safely mutate saves or economy.
 2. `DELETE /v1/account`: durable deletion state, audit, Apple reauthentication,
-   and Cognito global-sign-out adapters exist locally. The deployed build still
-   keeps deletion statically unavailable; activation needs a newer code
-   deployment and separately approved `cognito-idp:AdminUserGlobalSignOut` permission.
+   Cognito global-sign-out, and bounded asynchronous cleanup exist locally. The
+   deployed build still keeps deletion statically unavailable; activation needs
+   a newer API deployment, a worker Lambda plus retrying asynchronous trigger,
+   and separately approved `cognito-idp:AdminUserGlobalSignOut` permission.
 3. `POST /v1/spend` and `POST /v1/rewards/claim`: the atomic economy ledger and
    fail-closed policy boundaries exist. Activation needs the complete approved
    action/reference price table and a concrete reward-evidence verifier.

@@ -66,7 +66,7 @@ const profile: AccountProfile = {
 };
 
 class AllowDeletion implements AccountDeletionAuthorizer {
-  public async authorize(): Promise<void> {}
+  public async authorize(): Promise<{}> { return {}; }
 }
 
 class NoopRevoker implements PlayerSessionRevoker {

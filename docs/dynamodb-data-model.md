@@ -97,6 +97,22 @@ table keys. Any lifecycle data must use separately protected attributes.
 - Account deletion uses a state transition condition (`active` to `requested`)
   and an idempotent job record. Retained purchase records are minimized and
   separated from deleted profile data.
+- A deletion job stores only the hashed provider-mapping key returned by the
+  successful reauthentication boundary; it never stores an Apple subject or
+  credential. The bounded worker deletes one player-partition record per atomic
+  step, removes the guest installation mapping with the profile, then scans for
+  non-player-partition records still bound by `playerId`. Purchase transactions
+  and verified fraud-prevention claims retain their business identifiers but
+  replace `playerId` with a random deletion-scoped `retentionId` and remove any
+  embedded public result. Refresh credentials, idempotency results, saves,
+  balances, ledgers, unlocks, entitlements, profiles, and audit records are
+  deleted. Unknown player-owned entity types fail closed for manual review.
+- Completion atomically removes the hashed Apple provider mapping and reduces
+  the deletion job to state, timestamps, random retention ID, and a 30-day TTL.
+  Each cleanup transaction also advances the durable job, so timeouts and
+  partial failures are safe to retry. The initial low-volume implementation
+  uses bounded one-item scans for external records; a player-owner GSI is the
+  required scale optimization before production deletion volume warrants it.
 - The deletion transaction also appends one immutable audit event and stores the
   original receipt. Requests made after deletion is already requested reuse the
   durable job timestamp and do not append another audit event, even under a new
@@ -104,8 +120,8 @@ table keys. Any lifecycle data must use separately protected attributes.
 
 ## Secondary indexes
 
-No secondary index is required for the initial player-scoped API. A deletion-job
-index may be added when an asynchronous worker is implemented:
+No secondary index is required for the initial low-volume development worker.
+A deletion-job index may be added when queue polling is used:
 
 - `gsi1pk = DELETION_STATE#<state>`
 - `gsi1sk = <requestedAt>#<playerId>`

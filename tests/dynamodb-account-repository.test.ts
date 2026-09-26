@@ -68,6 +68,16 @@ test("DynamoDB deletion atomically transitions profile, creates job, audit, and 
   assert.match(String(items?.[3]?.Put?.Item?.pk), /^IDEMPOTENCY#PLAYER#.+#[a-f0-9]{64}$/);
 });
 
+test("DynamoDB deletion job stores only the derived provider mapping key needed by cleanup", async () => {
+  const providerMappingKey = { pk: `PROVIDER#${"a".repeat(64)}#${"b".repeat(64)}`, sk: "PLAYER" } as const;
+  const client = new ScriptedClient([{}, { Item: profileItem() }, {}]);
+  await repository(client).requestDeletionWithAudit({ ...input, providerMappingKey });
+  const job = (client.commands[2] as TransactWriteCommand).input.TransactItems?.[1]?.Put?.Item;
+  assert.equal(job?.providerMappingPk, providerMappingKey.pk);
+  assert.equal(job?.providerMappingSk, providerMappingKey.sk);
+  assert.equal(JSON.stringify(job).includes("private-subject"), false);
+});
+
 test("DynamoDB deletion replays its durable receipt without another audit transaction", async () => {
   const receipt = { deletionState: "requested", requestedAt: now.toISOString() } as const;
   const client = new ScriptedClient([{

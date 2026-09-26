@@ -50,7 +50,7 @@ was skipped by owner decision; ItsAllRealAdmin was used directly for all phases.
   deployment; never claim that the live Lambda matches the current HEAD without
   a fresh read-only comparison.
 - Current local validation baseline as of 2026-09-10: 358/358 TypeScript tests,
-  30/30 PowerShell tests, valid OpenAPI, and both Lambda artifacts validated.
+  30/30 PowerShell tests, valid OpenAPI, and all three Lambda artifacts validated.
 - Locally implemented but disabled/unapproved live capabilities include account
   deletion, account-link reconciliation, economy/entitlement reads, and other
   routes explicitly identified in `docs/IMPLEMENTATION_STATUS.md`.
@@ -134,7 +134,7 @@ the successful ordinary sign-in exercised that path.
 - All AWS CLI calls in scripts use Invoke-AwsChecked (scripts/aws-helpers.ps1)
   which throws on nonzero $LASTEXITCODE — never use bare & aws in deployment scripts
 - Lambda artifacts are CJS bundles produced by npm run bundle (esbuild)
-- npm run check must pass before any deployment (current baseline: 364 TS + 30 PS tests + lint)
+- npm run check must pass before any deployment (current baseline: 377 TS + 30 PS tests + lint)
 - npm run bundle must pass (both artifacts validated) before any Lambda deployment
 
 ## Deployment script locations

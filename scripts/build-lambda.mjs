@@ -1,5 +1,5 @@
 // scripts/build-lambda.mjs
-// Produces two self-contained ESM bundles under dist-lambda/:
+// Produces self-contained CJS bundles under dist-lambda/.
 //   api.mjs              — API Lambda entry point
 //   cognito-triggers.mjs — Cognito trigger dispatcher
 //
@@ -46,8 +46,14 @@ await Promise.all([
     entryPoints: [join(root, "src", "lambda", "cognito-triggers.ts")],
     outfile: join(outDir, "cognito-triggers.cjs"),
   }),
+  build({
+    ...shared,
+    entryPoints: [join(root, "src", "lambda", "account-deletion-worker.ts")],
+    outfile: join(outDir, "account-deletion-worker.cjs"),
+  }),
 ]);
 
 console.log("Lambda bundles written to dist-lambda/");
 console.log("  api.cjs");
 console.log("  cognito-triggers.cjs");
+console.log("  account-deletion-worker.cjs");

@@ -29,12 +29,18 @@ export interface AccountDeletionReceipt {
   readonly requestedAt: string;
 }
 
+export interface AccountDeletionAuthorization {
+  /** A one-way provider-identity lookup key; never a provider subject or credential. */
+  readonly providerMappingKey?: { readonly pk: string; readonly sk: string } | undefined;
+}
+
 export interface AccountRepository {
   getByPlayerId(playerId: string): Promise<AccountProfile | undefined>;
   requestDeletionWithAudit(input: {
     readonly playerId: string;
     readonly idempotencyKey: string;
     readonly now: Date;
+    readonly providerMappingKey?: { readonly pk: string; readonly sk: string } | undefined;
   }): Promise<AccountDeletionReceipt>;
 }
 
@@ -43,7 +49,7 @@ export interface AccountDeletionAuthorizer {
     readonly principal: AuthenticatedPrincipal;
     readonly proof: AccountDeletionProof | undefined;
     readonly now: Date;
-  }): Promise<void>;
+  }): Promise<AccountDeletionAuthorization>;
 }
 
 export interface PlayerSessionRevoker {
@@ -76,7 +82,7 @@ export class AccountService {
   }): Promise<AccountDeletionReceipt> {
     validateDeletionRequest(input.request, input.idempotencyKey);
     const timestamp = this.now();
-    await this.deletionAuthorizer.authorize({
+    const authorization = await this.deletionAuthorizer.authorize({
       principal: input.principal,
       proof: input.request.reauthentication,
       now: timestamp,
@@ -85,6 +91,7 @@ export class AccountService {
       playerId: input.principal.playerId,
       idempotencyKey: input.idempotencyKey,
       now: timestamp,
+      providerMappingKey: authorization.providerMappingKey,
     });
     // The durable deletion request must exist before credentials are revoked so
     // a retry can resume cleanup even if revocation has a transient failure.

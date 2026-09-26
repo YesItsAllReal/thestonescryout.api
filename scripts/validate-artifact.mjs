@@ -10,6 +10,7 @@
 // Handler names verified:
 //   api.zip              -> api.cjs      -> api.handler
 //   cognito-triggers.zip -> cognito-triggers.cjs -> cognito-triggers.handler
+//   account-deletion-worker.zip -> account-deletion-worker.cjs -> account-deletion-worker.handler
 //
 // Usage:
 //   node scripts/validate-artifact.mjs
@@ -46,6 +47,7 @@ const DUMMY_ENV = {
 const artifacts = [
   [join(root, "dist-lambda", "api.zip"),              "api.cjs",              "handler"],
   [join(root, "dist-lambda", "cognito-triggers.zip"), "cognito-triggers.cjs", "handler"],
+  [join(root, "dist-lambda", "account-deletion-worker.zip"), "account-deletion-worker.cjs", "handler"],
 ];
 
 let allPassed = true;

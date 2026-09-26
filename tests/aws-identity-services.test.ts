@@ -27,7 +27,7 @@ test("AWS identity factory composes concrete services without network access", (
       cognitoClientId: "test-client-id",
       refreshLifetimeSeconds: 2_592_000,
     },
-    deletionAuthorizer: { async authorize() {} },
+    deletionAuthorizer: { async authorize() { return {}; } },
     sessionRevoker:     { async revokeAll() {} },
     now: () => new Date(),
   });
@@ -60,7 +60,7 @@ test("AWS identity factory returns undefined appleAccount when appleAudience is 
       cognitoClientId: "test-client-id",
       refreshLifetimeSeconds: 2_592_000,
     },
-    deletionAuthorizer: { async authorize() {} },
+    deletionAuthorizer: { async authorize() { return {}; } },
     sessionRevoker:     { async revokeAll() {} },
     now: () => new Date(),
   });
@@ -116,7 +116,7 @@ test("Issue 2: refresh compensation gateway is wired to the registry", () => {
       cognitoClientId: "test-client-id",
       refreshLifetimeSeconds: 2_592_000,
     },
-    deletionAuthorizer: { async authorize() {} },
+    deletionAuthorizer: { async authorize() { return {}; } },
     sessionRevoker:     { async revokeAll() {} },
     now: () => new Date(),
   });

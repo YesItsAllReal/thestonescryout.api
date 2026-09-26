@@ -5,6 +5,7 @@ import {
   type AccountDeletionProof,
 } from "./account-service.js";
 import type { AppleIdentityVerifier } from "./apple-account-service.js";
+import { providerIdentityKey } from "./provider-identity-key.js";
 
 export interface ProviderIdentityOwnershipResolver {
   resolvePlayerId(input: {
@@ -23,7 +24,7 @@ export class AppleAccountDeletionAuthorizer implements AccountDeletionAuthorizer
     readonly principal: AuthenticatedPrincipal;
     readonly proof: AccountDeletionProof | undefined;
     readonly now: Date;
-  }): Promise<void> {
+  }): Promise<{ readonly providerMappingKey: { readonly pk: string; readonly sk: string } }> {
     if (input.principal.sessionKind !== "account" || input.proof === undefined ||
         input.proof.provider !== "apple" || !validProof(input.proof)) {
       throw rejected();
@@ -33,6 +34,7 @@ export class AppleAccountDeletionAuthorizer implements AccountDeletionAuthorizer
       const identity = await this.verifier.verify(input.proof, input.now);
       const owner = await this.ownership.resolvePlayerId(identity);
       if (owner !== input.principal.playerId) throw rejected();
+      return { providerMappingKey: providerIdentityKey(identity.issuer, identity.subject) };
     } catch {
       throw rejected();
     }

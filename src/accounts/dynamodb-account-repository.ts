@@ -90,7 +90,7 @@ export class DynamoDbAccountRepository implements AccountRepository {
           {
             Put: {
               TableName: this.tableName,
-              Item: deletionJobItem(input.playerId, receipt),
+              Item: deletionJobItem(input.playerId, receipt, input.providerMappingKey),
               ConditionExpression: "attribute_not_exists(pk)",
             },
           },
@@ -224,7 +224,11 @@ function deletionIdempotencyKey(playerId: string, key: string): Record<string, s
   return { pk: `IDEMPOTENCY#PLAYER#${playerId}#${sha256(key)}`, sk: "RESULT" };
 }
 
-function deletionJobItem(playerId: string, receipt: AccountDeletionReceipt): Record<string, unknown> {
+function deletionJobItem(
+  playerId: string,
+  receipt: AccountDeletionReceipt,
+  providerMappingKey: { readonly pk: string; readonly sk: string } | undefined,
+): Record<string, unknown> {
   return {
     pk: `DELETION#${playerId}`,
     sk: "REQUEST",
@@ -233,6 +237,10 @@ function deletionJobItem(playerId: string, receipt: AccountDeletionReceipt): Rec
     playerId,
     state: receipt.deletionState,
     requestedAt: receipt.requestedAt,
+    ...(providerMappingKey === undefined ? {} : {
+      providerMappingPk: providerMappingKey.pk,
+      providerMappingSk: providerMappingKey.sk,
+    }),
   };
 }
 

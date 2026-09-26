@@ -28,6 +28,7 @@ await writeFile(join(outDir, "package.json"), pkgJson, "utf8");
 const bundles = [
   { name: "api",              files: ["api.cjs", "api.cjs.map", "package.json"] },
   { name: "cognito-triggers", files: ["cognito-triggers.cjs", "cognito-triggers.cjs.map", "package.json"] },
+  { name: "account-deletion-worker", files: ["account-deletion-worker.cjs", "account-deletion-worker.cjs.map", "package.json"] },
 ];
 
 for (const { name, files } of bundles) {
