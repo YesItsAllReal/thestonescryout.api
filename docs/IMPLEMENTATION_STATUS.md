@@ -1,6 +1,6 @@
 # Checkpoint 6 implementation status
 
-Last verified: 2026-09-23
+Last verified: 2026-09-26
 
 Architecture: AWS serverless/DynamoDB is approved by ADR 0001. Dev environment
 resources have been provisioned in us-east-1 (account 598628878271). See the
@@ -269,13 +269,12 @@ provisioned resources section below for identifiers.
   credential state. Audit records contain no token or credential hash. Initial
   registration also recognizes DynamoDB transaction-cancellation conflicts and
   strongly verifies the concurrent winner before accepting it.
-- A local `CognitoPlayerSessionRevoker` implements provider-wide account
+- A deployed `CognitoPlayerSessionRevoker` implements provider-wide account
   session invalidation with `AdminUserGlobalSignOut`. It validates the
   server-owned UUID username, treats a missing shadow user as idempotently
   revoked, and maps every other provider failure to an opaque error. It is not
-  wired into the Lambda yet: deployment requires explicit approval to add
-  `cognito-idp:AdminUserGlobalSignOut` to the API role and completion of the
-  deletion reauthentication boundary.
+  wired into the development Lambda. The development API role has the scoped
+  `cognito-idp:AdminUserGlobalSignOut` permission on the development pool.
 - A concrete DynamoDB account-link reconciliation repository and pure transaction
   builder now strongly load and bind the
   pending unexpired ticket, active profiles, Apple mapping, hashed installation
@@ -298,9 +297,8 @@ provisioned resources section below for identifiers.
   `SCO_ACCOUNT_DELETION_ENABLED=true` gate are present, the identity factory
   composes concrete Apple reauthentication, strongly consistent provider
   ownership lookup, and Cognito global sign-out, and the Lambda enables the real
-  deletion handler. The live gate remains off; activation requires Apple portal
-  confirmation, the additional IAM permission, deployment approval, and smoke
-  testing.
+  deletion handler. The development gate is live as of 2026-09-26; staging and
+  production remain untouched.
 - Deletion retry coverage proves that a provider revocation failure occurs only
   after the durable deletion state and audit event exist, and that an identical
   retry resumes revocation without duplicating the audit record.
@@ -311,16 +309,17 @@ provisioned resources section below for identifiers.
   purchase and verified-fraud records under a random retention ID, remove the
   Apple and installation mappings, and leave a 30-day TTL completion marker.
   Unknown future entity types fail closed. Worker retries and transaction
-  failures cannot advance the job independently of their data mutation. No
-  worker Lambda, DynamoDB stream/event source, IAM change, or live destructive test has
-  been created or run.
+  failures cannot advance the job independently of their data mutation. The
+  development worker, NEW_IMAGE stream, filtered event-source mapping, retry
+  destination, and alarms are live. A key-filtered TTL `REMOVE` event is safely
+  acknowledged without reprocessing an expired completion marker.
 - A local Apple account-deletion authorizer now requires a fresh verified Apple
   assertion and a strongly consistent hashed provider-mapping lookup that must
   resolve to the authenticated player. Guest sessions, missing proofs,
   cross-player identities, malformed mappings, and provider/store failures all
-  fail through the same privacy-safe authorization boundary. The newer deletion
-  composition remains undeployed and disabled; the deployed build exposes only
-  the separately activated sign-in/link behavior.
+  fail through the same privacy-safe authorization boundary. The development
+  composition is deployed and enabled; a real Apple-reauthenticated destructive
+  device acceptance test remains pending.
 - The DynamoDB economy implementation now has a pure, offline-tested atomic
   transaction builder. A balance compare-and-set, one immutable ledger item per
   normalized resource mutation, optional verified-grant claim, and hashed
@@ -393,17 +392,18 @@ provisioned resources section below for identifiers.
 
 Checkpoint 6 is not yet closed end to end. Its contract, persistence, security,
 and offline-test foundations are substantially implemented. The current local
-tree passes 377/377 TypeScript tests, 30/30 PowerShell tests, OpenAPI validation,
+tree passes 379/379 TypeScript tests, 30/30 PowerShell tests, OpenAPI validation,
 and all three Lambda artifact checks. The following behaviors deliberately fail closed:
 
 1. `POST /v1/sync/commands`: DynamoDB persistence and deterministic envelope
    validation exist, but authoritative game-command execution rules must come
    from the shared game domain before replay can safely mutate saves or economy.
 2. `DELETE /v1/account`: durable deletion state, audit, Apple reauthentication,
-   Cognito global-sign-out, and bounded asynchronous cleanup exist locally. The
-   deployed build still keeps deletion statically unavailable; activation needs
-   a newer API deployment, a worker Lambda plus retrying asynchronous trigger,
-   and separately approved `cognito-idp:AdminUserGlobalSignOut` permission.
+   Cognito global-sign-out, and bounded asynchronous cleanup are deployed in
+   development. Synthetic disposable-account worker acceptance passed, including
+   complete cleanup, 30-day marker TTL, revoked credential rejection, empty DLQ,
+   and unrelated-record isolation. Fresh Apple reauthentication through the iOS
+   route still requires real-device acceptance before release closure.
 3. `POST /v1/spend` and `POST /v1/rewards/claim`: the atomic economy ledger and
    fail-closed policy boundaries exist. Activation needs the complete approved
    action/reference price table and a concrete reward-evidence verifier.
@@ -411,9 +411,10 @@ and all three Lambda artifact checks. The following behaviors deliberately fail 
    verification, URL policy, and validation exist locally. Activation needs an
    approved public signing key, signed objects, and environment URLs; no key or
    object has been created.
-5. Account-link conflict reconciliation is locally implemented, but activation
-   requires a trusted content version and an approved backfill of origin fields
-   for any legacy balances created before this additive migration.
+5. Account-link conflict reconciliation is active in development with trusted
+   content version `starter-1` after the verified 10-row balance-origin migration.
+   Genuine conflict acceptance for both save choices still requires disposable
+   real-device Apple accounts; it has not been claimed from synthetic tests.
 
 The purchase, App Store notification, rewarded-ad, and Game Center work belongs
 to Checkpoint 7 and does not block Checkpoint 6 closure.
@@ -432,17 +433,22 @@ All resources use the `sco-dev-` prefix and are fully isolated from existing
 `itsallreal.org` and `bmerge-*` resources.
 
 - IAM role: `sco-dev-lambda-role` — least-privilege, scoped to sco-dev-players,
-  /sco/dev/* SSM parameters, /sco/dev/api log group, and five Cognito admin
-  actions on the sco-dev user pool.
+  /sco/dev/* SSM parameters, /sco/dev/api log group, five Cognito session
+  actions, and `AdminUserGlobalSignOut` on the sco-dev user pool.
 - IAM role: `sco-dev-cognito-triggers-role` — Lambda trust, logs-only policy
   scoped to /sco/dev/cognito-triggers.
 - DynamoDB table: `sco-dev-players` — pk+sk, on-demand billing, no PITR (dev).
-  TTL enabled on attribute `ttl`.
+  TTL is enabled on `ttl`; NEW_IMAGE streams drive deletion cleanup.
 - Lambda function: `sco-dev-api` — Node 22, arm64, 512 MB, 10 s, handler
   `api.handler`. Wired with concrete Cognito and DynamoDB adapters.
-  Eleven environment variables set, including the confirmed
-  SCO_APPLE_AUDIENCE. Account deletion and reconciliation activation variables
-  remain absent.
+  Thirteen environment variables are set, including the confirmed
+  `SCO_APPLE_AUDIENCE`, `SCO_ACCOUNT_LINK_CONTENT_VERSION=starter-1`, and
+  `SCO_ACCOUNT_DELETION_ENABLED=true`.
+- Lambda function: `sco-dev-account-deletion-worker` — Node 22, arm64,
+  256 MB, 30 s, handler `account-deletion-worker.handler`. Its filtered mapping
+  uses batch size 1, parallelization factor 1, partial-batch responses, bounded
+  retries, and the development deletion DLQ. Reserved concurrency is omitted
+  because the account's initial concurrency cap requires ten unreserved units.
 - Lambda function: `sco-dev-cognito-triggers` — Node 22, arm64, 128 MB, 5 s,
   handler `cognito-triggers.handler`. Dispatches DefineAuth, CreateAuth,
   VerifyAuth triggers. JSON log format, /sco/dev/cognito-triggers log group.
@@ -461,8 +467,11 @@ All resources use the `sco-dev-` prefix and are fully isolated from existing
   no secret, ALLOW_CUSTOM_AUTH only (ALLOW_REFRESH_TOKEN_AUTH removed),
   RefreshTokenRotation=ENABLED RetryGracePeriodSeconds=0,
   60 min access token, 30-day refresh token.
-- CloudWatch log groups: /sco/dev/api, /sco/dev/apigw, /sco/dev/cognito-triggers
+- CloudWatch log groups: /sco/dev/api, /sco/dev/apigw, /sco/dev/cognito-triggers,
+  /sco/dev/account-deletion-worker
   — 14-day retention.
+
+Four development deletion alarms were configured and were `OK` on 2026-09-26.
 
 ## Decisions required before staging/production or federation work
 
