@@ -12,7 +12,7 @@
     "package:lambda": "node scripts/package-lambda.mjs",
     "validate:artifact": "node scripts/validate-artifact.mjs",
     "validate:ps1": "node scripts/validate-ps1.mjs",
-    "test:scripts": "powershell -NoProfile -File scripts/test-scripts.ps1",
+    "test:scripts": "node scripts/run-script-tests.mjs",
     "bundle": "npm run build:lambda && npm run package:lambda && npm run validate:artifact",
     "contract:lint": "redocly lint openapi/product-api.yaml",
     "test": "npm run build && node --test dist/tests/**/*.test.js",

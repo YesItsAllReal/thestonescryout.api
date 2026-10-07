@@ -14,6 +14,7 @@ import { promisify } from "node:util";
 const exec = promisify(execFile);
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const scriptsDir = __dirname;
+const powershell = process.platform === "win32" ? "powershell.exe" : "pwsh";
 
 // Find all .ps1 files under scripts/.
 const entries = await readdir(scriptsDir);
@@ -49,7 +50,7 @@ const psScript = psLines.join("\n");
 
 let result;
 try {
-  result = await exec("powershell.exe", [
+  result = await exec(powershell, [
     "-NoProfile", "-NonInteractive", "-Command", psScript,
   ], { timeout: 30_000 });
 } catch (err) {
