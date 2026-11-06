@@ -19,6 +19,7 @@ export interface RuntimeConfiguration {
   readonly accountDeletionEnabled: boolean;
   readonly economyReadEnabled: boolean;
   readonly entitlementsReadEnabled: boolean;
+  readonly adRewardTestModeEnabled: boolean;
 }
 
 export class EnvironmentConfigurationError extends Error {}
@@ -108,7 +109,9 @@ export function loadRuntimeConfiguration(
   const accountDeletionEnabled=optionalBoolean(environment,"SCO_ACCOUNT_DELETION_ENABLED");
   const economyReadEnabled=optionalBoolean(environment,"SCO_ECONOMY_READ_ENABLED");
   const entitlementsReadEnabled=optionalBoolean(environment,"SCO_ENTITLEMENTS_READ_ENABLED");
+  const adRewardTestModeEnabled=optionalBoolean(environment,"SCO_AD_REWARD_TEST_MODE_ENABLED");
   if(accountDeletionEnabled&&appleAudience===undefined)throw new EnvironmentConfigurationError("SCO_ACCOUNT_DELETION_ENABLED requires SCO_APPLE_AUDIENCE");
+  if(adRewardTestModeEnabled&&runtimeEnvironment==="production")throw new EnvironmentConfigurationError("SCO_AD_REWARD_TEST_MODE_ENABLED cannot be enabled in production");
 
   return {
     environment: runtimeEnvironment,
@@ -126,6 +129,7 @@ export function loadRuntimeConfiguration(
     accountDeletionEnabled,
     economyReadEnabled,
     entitlementsReadEnabled,
+    adRewardTestModeEnabled,
   };
 }
 

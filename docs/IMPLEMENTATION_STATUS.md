@@ -96,7 +96,13 @@ provisioned resources section below for identifiers.
   enter persistence. The concrete repository executes this transaction with
   strong replay/event reads, cross-player protection, durable duplicate
   receipts, concurrent-winner recovery, and one bounded balance-race retry. The
-  ad route remains disabled pending a provider verifier and deployment approval.
+  ad route remains disabled in the deployed Lambda pending deployment approval.
+  Locally, an explicit `SCO_AD_REWARD_TEST_MODE_ENABLED=true` development/staging
+  gate now wires the route to a verifier that accepts only Google’s official
+  rewarded test unit, an exact earned-callback envelope, and the authenticated
+  player’s matching claim. The gate is rejected at startup in production. This
+  enables internal TestFlight reward testing without weakening the requirement
+  for genuine Google SSV before production activation.
 - Public content catalog and remote-configuration services depend on repository,
   detached-signature verifier, and HTTPS URL-policy ports rather than S3,
   CloudFront, or key-service types. The dev bucket and CloudFront distribution
@@ -352,6 +358,11 @@ provisioned resources section below for identifiers.
   environment rollout gates (`SCO_ECONOMY_READ_ENABLED` and
   `SCO_ENTITLEMENTS_READ_ENABLED`) that default to false. A future reconciliation
   code deployment therefore cannot silently activate either read route.
+- Rewarded test grants have a separate strict rollout gate,
+  `SCO_AD_REWARD_TEST_MODE_ENABLED`, which defaults to false and cannot be true
+  when `SCO_ENVIRONMENT=production`. Activating it still requires an approved
+  development Lambda configuration/code deployment; no deployment was performed
+  as part of the implementation.
 - SCO_APPLE_AUDIENCE is optional at Lambda startup. When absent, Apple
   sign-in routes return 503 and all other routes function normally. On
   2026-09-22 the owner confirmed `com.itsallrealministries.stonescryout` is

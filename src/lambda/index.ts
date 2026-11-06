@@ -15,8 +15,11 @@ import { createDeleteAccountHandler, createGetAccountHandler } from "../http/acc
 import { createGetSaveHandler, createPutSaveHandler } from "../http/save-handlers.js";
 import { createRefreshSessionHandler, createRevokeSessionHandler } from "../http/session-handlers.js";
 import { createGetEconomyHandler, createGetEntitlementsHandler } from "../http/economy-handlers.js";
+import { createAdRewardVerificationHandler } from "../http/commerce-handlers.js";
 import { EconomyService } from "../economy/economy-service.js";
 import { EntitlementService } from "../economy/entitlement-service.js";
+import { AdRewardService } from "../commerce/commerce-service.js";
+import { DevelopmentAdMobCompletionVerifier, DevelopmentAdRewardCatalog } from "../commerce/development-ad-reward.js";
 import { authenticateRequest, limitPublicRequest, loggedProblem } from "../http/handler-support.js";
 
 // Fail closed: if any required environment variable is missing or invalid,
@@ -82,6 +85,14 @@ const economy = new EconomyService(
   now,
 );
 const entitlement = new EntitlementService(identity.persistence.entitlement);
+const adReward = config.adRewardTestModeEnabled
+  ? new AdRewardService(
+      new DevelopmentAdMobCompletionVerifier(),
+      new DevelopmentAdRewardCatalog(),
+      identity.persistence.commerce,
+      now,
+    )
+  : undefined;
 
 // Issue 7: 503 handlers use the shared privacy-aware helpers so they apply
 // rate limiting, require authentication where appropriate, and return the
@@ -110,7 +121,8 @@ function authenticatedNotAvailable(route: string): HttpHandler {
 //   POST   /v1/rewards/claim    — provider reward-evidence verification is pending
 //   POST   /v1/purchases/verify — Checkpoint 7 provider verification is pending
 //   POST   /v1/app-store/notifications — Checkpoint 7 provider verification is pending
-//   POST   /v1/ads/reward/verify — Checkpoint 7 provider verification is pending
+//   POST   /v1/ads/reward/verify — production Google SSV verification is pending;
+//                                  development may explicitly enable test-unit verification
 //   GET    /v1/content/catalog  — signing key and published content are not configured
 //   GET    /v1/config           — signing key and published content are not configured
 //   POST   /v1/sync/commands    — authoritative game-command execution rules are pending
@@ -148,7 +160,9 @@ const appHandler = createApiRouter({
     { method: "POST",   path: "/v1/rewards/claim",           handler: authenticatedNotAvailable("POST /v1/rewards/claim") },
     { method: "POST",   path: "/v1/purchases/verify",        handler: authenticatedNotAvailable("POST /v1/purchases/verify") },
     { method: "POST",   path: "/v1/app-store/notifications", handler: publicNotAvailable("POST /v1/app-store/notifications") },
-    { method: "POST",   path: "/v1/ads/reward/verify",       handler: authenticatedNotAvailable("POST /v1/ads/reward/verify") },
+    { method: "POST",   path: "/v1/ads/reward/verify",       handler: adReward !== undefined
+        ? createAdRewardVerificationHandler(adReward, authDeps)
+        : authenticatedNotAvailable("POST /v1/ads/reward/verify") },
     { method: "GET",    path: "/v1/content/catalog",         handler: publicNotAvailable("GET /v1/content/catalog") },
     { method: "GET",    path: "/v1/config",                  handler: publicNotAvailable("GET /v1/config") },
     { method: "POST",   path: "/v1/sync/commands",           handler: authenticatedNotAvailable("POST /v1/sync/commands") },

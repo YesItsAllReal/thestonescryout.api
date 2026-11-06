@@ -55,7 +55,11 @@ export interface VerifiedAdCompletion {
 }
 
 export interface AdCompletionVerifier {
-  verify(payload: string, now: Date): Promise<VerifiedAdCompletion>;
+  verify(
+    payload: string,
+    now: Date,
+    expected: { readonly playerId: string; readonly claimId: string },
+  ): Promise<VerifiedAdCompletion>;
 }
 
 export interface AdRewardCatalog {
@@ -195,7 +199,10 @@ export class AdRewardService {
     const timestamp = this.now();
     let completion: VerifiedAdCompletion;
     try {
-      completion = await this.verifier.verify(input.verificationPayload, timestamp);
+      completion = await this.verifier.verify(input.verificationPayload, timestamp, {
+        playerId: input.principal.playerId,
+        claimId: input.claimId,
+      });
     } catch {
       throw new CommerceVerificationError("ad completion could not be verified");
     }
