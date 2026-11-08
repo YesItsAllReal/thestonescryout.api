@@ -36,14 +36,14 @@ export function createGuestSessionHandler(input: {
       return json(201, requestId, response);
     } catch (error: unknown) {
       if (error instanceof GuestSessionValidationError || error instanceof SyntaxError) {
-        input.logger.info({ event: "http_request", route, requestId, status: 400 });
+        input.logger.info({ event: "http_request", route, requestId, status: 400, failureClass: "request_validation" });
         return problem(400, requestId, "Request validation failed", "/problems/validation");
       }
       if (error instanceof GuestSessionIdempotencyConflictError) {
-        input.logger.info({ event: "http_request", route, requestId, status: 409 });
+        input.logger.info({ event: "http_request", route, requestId, status: 409, failureClass: "idempotency_conflict" });
         return problem(409, requestId, "Idempotency key conflict", "/problems/idempotency-conflict");
       }
-      input.logger.error({ event: "http_request_failed", route, requestId, status: 500 });
+      input.logger.error({ event: "http_request_failed", route, requestId, status: 500, failureClass: "guest_session_service" });
       return problem(500, requestId, "Service failure", "/problems/server-error");
     }
   };

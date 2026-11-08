@@ -122,18 +122,35 @@ function mapCommerceError(
   dependencies: AuthenticatedHandlerDependencies,
 ) {
   if (error instanceof SyntaxError || error instanceof CommerceValidationError || error instanceof CommerceProductNotFoundError) {
+    logCommerceFailure(dependencies, route, requestId, 400, "request_validation");
     return loggedProblem(dependencies.logger, route, requestId, 400, "Request validation failed", "/problems/validation");
   }
   if (error instanceof CommerceVerificationError) {
+    logCommerceFailure(dependencies, route, requestId, 401, "provider_verification");
     return loggedProblem(dependencies.logger, route, requestId, 401, "Provider verification failed", "/problems/provider-verification");
   }
   if (error instanceof CommerceOwnershipError) {
+    logCommerceFailure(dependencies, route, requestId, 403, "ownership_mismatch");
     return loggedProblem(dependencies.logger, route, requestId, 403, "Verified event ownership mismatch", "/problems/forbidden");
   }
   if (error instanceof CommerceIdempotencyConflictError) {
+    logCommerceFailure(dependencies, route, requestId, 409, "idempotency_conflict");
     return loggedProblem(dependencies.logger, route, requestId, 409, "Idempotency key conflict", "/problems/idempotency-conflict");
   }
+  logCommerceFailure(dependencies, route, requestId, 500, "commerce_service");
   return loggedProblem(dependencies.logger, route, requestId, 500, "Service failure", "/problems/server-error");
+}
+
+function logCommerceFailure(
+  dependencies: AuthenticatedHandlerDependencies,
+  route: string,
+  requestId: string,
+  status: number,
+  failureClass: string,
+): void {
+  const event = { event: "commerce_request_failed", route, requestId, status, failureClass };
+  if (status >= 500) dependencies.logger.error(event);
+  else dependencies.logger.info(event);
 }
 
 function publicCommerceGrant(result: CommerceGrantResult) {

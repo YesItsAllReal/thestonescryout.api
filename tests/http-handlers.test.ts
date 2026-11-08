@@ -90,11 +90,13 @@ test("guest handler rate limits without invoking or logging request content", as
 });
 
 test("guest handler maps malformed JSON to a privacy-safe problem", async () => {
-  const { handler } = guestHandler();
+  const { handler, logger } = guestHandler();
   const response = await handler({
     headers: { "Idempotency-Key": "guest-create-0005" },
     body: "{not-json",
   });
   assert.equal(response.statusCode, 400);
   assert.equal(Object.hasOwn(JSON.parse(response.body), "detail"), false);
+  assert.equal(logger.events.some((event) => event.failureClass === "request_validation"), true);
+  assert.equal(JSON.stringify(logger.events).includes("not-json"), false);
 });

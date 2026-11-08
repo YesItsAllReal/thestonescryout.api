@@ -135,6 +135,34 @@ test("rewarded-ad handler grants server-configured value and hides provider payl
   assert.equal(JSON.stringify(logger.events).includes(verificationPayload), false);
 });
 
+test("rewarded-ad handler logs a privacy-safe provider-verification stage", async () => {
+  const verificationPayload = "sensitive-invalid-ad-completion-payload";
+  const verifier: AdCompletionVerifier = {
+    async verify() { throw new Error("provider detail must not be logged"); },
+  };
+  const rewards: AdRewardCatalog = { async resolve() { return [{ resource: "coins", delta: 100 }]; } };
+  const logger = new CapturingLogger();
+  const response = await createAdRewardVerificationHandler(
+    new AdRewardService(verifier, rewards, commerceRepository(), now),
+    authenticatedDependencies(logger),
+  )({
+    headers: { authorization: "Bearer local-commerce-token", "idempotency-key": "ad-http-reward-failure-1" },
+    body: JSON.stringify({
+      placement: "storeCoins",
+      rewardChoice: "coins100",
+      claimId: "claim-http-failure-1",
+      verificationPayload,
+      clientBuild: 1,
+      contentVersion: "starter-1",
+    }),
+  });
+  assert.equal(response.statusCode, 401);
+  assert.equal(logger.events.some((event) => event.failureClass === "provider_verification"), true);
+  const logs = JSON.stringify(logger.events);
+  assert.equal(logs.includes(verificationPayload), false);
+  assert.equal(logs.includes("provider detail"), false);
+});
+
 const signature = "a".repeat(64);
 const signatureVerifier: SignedDocumentVerifier = { async verify(input) { return input.signature === signature; } };
 const urlPolicy: PublicUrlPolicy = {
