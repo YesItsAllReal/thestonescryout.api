@@ -41,6 +41,7 @@ const DUMMY_ENV = {
   SCO_GUEST_STARTING_COINS:     "200",
   SCO_GUEST_STARTING_GEMS:      "20",
   SCO_GUEST_STARTING_ENERGY:    "200",
+  SCO_APP_STORE_ENVIRONMENT:   "sandbox",
 };
 
 // Artifacts: [zipPath, expectedHandlerFile, exportedName]

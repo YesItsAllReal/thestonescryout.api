@@ -108,6 +108,7 @@ export interface CommerceRepository {
 
 export class CommerceValidationError extends Error {}
 export class CommerceVerificationError extends Error {}
+export class CommerceVerificationUnavailableError extends Error {}
 export class CommerceOwnershipError extends Error {}
 export class CommerceProductNotFoundError extends Error {}
 export class CommerceIdempotencyConflictError extends Error {}
@@ -134,7 +135,8 @@ export class PurchaseService {
     let transaction: VerifiedAppStoreTransaction;
     try {
       transaction = await this.verifier.verify(input.signedTransaction, timestamp);
-    } catch {
+    } catch (error: unknown) {
+      if (error instanceof CommerceVerificationUnavailableError || error instanceof CommerceProductNotFoundError) throw error;
       throw new CommerceVerificationError("App Store transaction could not be verified");
     }
     if (!await this.ownership.matches(input.principal.playerId, transaction.appAccountToken)) {

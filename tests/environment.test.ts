@@ -39,7 +39,22 @@ test("runtime configuration loads all fields correctly", () => {
     economyReadEnabled: false,
     entitlementsReadEnabled: false,
     adRewardTestModeEnabled: false,
+    applePurchases: undefined,
   });
+});
+
+test("StoreKit requires explicit environment activation and a production Apple ID", () => {
+  const sandbox = { ...VALID, SCO_ENVIRONMENT: "staging", SCO_APP_STORE_ENVIRONMENT: "sandbox" };
+  const production = { ...VALID, SCO_ENVIRONMENT: "production", SCO_APP_STORE_ENVIRONMENT: "production" };
+  assert.deepEqual(loadRuntimeConfiguration(sandbox).applePurchases, { environment: "sandbox" });
+  assert.throws(() => loadRuntimeConfiguration({ ...sandbox, SCO_ENVIRONMENT: "production" }), EnvironmentConfigurationError);
+  assert.throws(() => loadRuntimeConfiguration({ ...production, SCO_ENVIRONMENT: "staging" }), EnvironmentConfigurationError);
+  assert.throws(() => loadRuntimeConfiguration({ ...VALID, SCO_APP_STORE_ENVIRONMENT: "local" }), EnvironmentConfigurationError);
+  for (const id of [undefined, "0", "1e8", "9007199254740992", "com.example.application"]) {
+    assert.throws(() => loadRuntimeConfiguration({ ...production, SCO_APP_STORE_APPLE_ID: id }), /SCO_APP_STORE_APPLE_ID/);
+  }
+  assert.deepEqual(loadRuntimeConfiguration({ ...production, SCO_APP_STORE_APPLE_ID: "123456789" }).applePurchases,
+    { environment: "production", appAppleId: 123456789 });
 });
 
 test("runtime configuration returns undefined appleAudience when SCO_APPLE_AUDIENCE is absent", () => {

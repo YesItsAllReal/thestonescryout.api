@@ -536,10 +536,11 @@ paths:
       operationId: verifyPurchase
       summary: Verify and durably process an App Store transaction
       description: >-
-        Verifies Apple-signed transaction data and its environment, bundle,
-        product, and app-account-token binding before atomically recording the
-        globally unique transaction, ledger grant, and entitlement. A StoreKit
-        client callback alone never grants value.
+        Verifies the Apple signature, configured App Store environment, bundle,
+        and appAccountToken binding to the authenticated player UUID.
+        A single-unit Energy Refill (org.itsallreal.unearthed.energy.refill)
+        atomically grants 100 energy once per environment and transaction ID,
+        with a ledger entry and no entitlement. TestFlight uses Sandbox.
       security:
         - bearerAuth: []
       parameters:
@@ -573,6 +574,15 @@ paths:
           $ref: "#/components/responses/RateLimited"
         "500":
           $ref: "#/components/responses/ServerError"
+        "503":
+          description: Purchase verification is disabled or Apple verification is temporarily unavailable.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
   /v1/app-store/notifications:
     post:
       operationId: processAppStoreNotification

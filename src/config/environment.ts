@@ -1,3 +1,5 @@
+import type { ApplePurchaseConfiguration } from "../commerce/apple-transaction-verifier.js";
+
 export type RuntimeEnvironment = "development" | "staging" | "production";
 
 export interface RuntimeConfiguration {
@@ -20,6 +22,7 @@ export interface RuntimeConfiguration {
   readonly economyReadEnabled: boolean;
   readonly entitlementsReadEnabled: boolean;
   readonly adRewardTestModeEnabled: boolean;
+  readonly applePurchases: ApplePurchaseConfiguration | undefined;
 }
 
 export class EnvironmentConfigurationError extends Error {}
@@ -130,7 +133,28 @@ export function loadRuntimeConfiguration(
     economyReadEnabled,
     entitlementsReadEnabled,
     adRewardTestModeEnabled,
+    applePurchases: loadApplePurchases(environment, runtimeEnvironment),
   };
+}
+
+function loadApplePurchases(
+  environment: Readonly<Record<string, string | undefined>>,
+  runtimeEnvironment: RuntimeEnvironment,
+): ApplePurchaseConfiguration | undefined {
+  const mode = environment.SCO_APP_STORE_ENVIRONMENT?.trim();
+  if (mode === undefined || mode === "" || mode === "disabled") return undefined;
+  if (mode === "sandbox" && runtimeEnvironment !== "production") return { environment: "sandbox" };
+  if (mode === "production" && runtimeEnvironment === "production") {
+    const rawId = environment.SCO_APP_STORE_APPLE_ID?.trim() ?? "";
+    const appAppleId = Number(rawId);
+    if (!/^[1-9][0-9]*$/.test(rawId) || !Number.isSafeInteger(appAppleId)) {
+      throw new EnvironmentConfigurationError("SCO_APP_STORE_APPLE_ID must be the numeric App Store Connect Apple ID");
+    }
+    return { environment: "production", appAppleId };
+  }
+  throw new EnvironmentConfigurationError(
+    "SCO_APP_STORE_ENVIRONMENT must be disabled, sandbox in development/staging, or production in production",
+  );
 }
 
 function optionalIdentifier(environment:Readonly<Record<string,string|undefined>>,name:string,max:number):string|undefined{const value=environment[name]?.trim();if(value===undefined||value==="")return undefined;if(value.length>max||!/^[A-Za-z0-9._-]+$/.test(value))throw new EnvironmentConfigurationError(`${name} is invalid`);return value;}

@@ -80,8 +80,10 @@ provisioned resources section below for identifiers.
   environment-scoped StoreKit transaction, conditionally updates an authoritative
   balance, appends immutable IAP ledger entries, writes a non-consumable
   entitlement when applicable, and stores the hashed idempotent result. Raw
-  idempotency keys and app-account tokens are never persisted. The purchase route
-  remains disabled pending Apple verifier adapters and deployment approval.
+  idempotency keys and app-account tokens are never persisted. The API Lambda
+  composes Apple's signed transaction verifier and the 100-energy Energy Refill
+  catalog behind an explicit rollout gate. See the [StoreKit purchase rollout
+  plan](storekit-purchase-rollout.md).
 - A concrete DynamoDB commerce repository now executes that purchase transaction
   behind strong idempotency, transaction-ownership, and balance reads. It records
   durable receipts for duplicates submitted under new keys, rejects cross-player
@@ -351,8 +353,8 @@ provisioned resources section below for identifiers.
 - `GET /v1/entitlements` is locally wired to a paginated, strongly consistent
   DynamoDB reader behind bearer authentication. It validates every stored key,
   owner, version, state, environment, and purchase timestamp before returning a
-  deterministic product-ID ordering. Purchase and notification mutation routes
-  remain explicit 503 responses. This read route is not live until a separately
+  deterministic product-ID ordering. The App Store notification route remains
+  an explicit 503 response. This read route is not live until a separately
   approved API Lambda code deployment.
 - The newer economy and entitlement read routes now have independent strict
   environment rollout gates (`SCO_ECONOMY_READ_ENABLED` and

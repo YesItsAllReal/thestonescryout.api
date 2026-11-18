@@ -6,6 +6,7 @@ import {
   CommerceProductNotFoundError,
   CommerceValidationError,
   CommerceVerificationError,
+  CommerceVerificationUnavailableError,
   PurchaseService,
   type AdPlacement,
   type AdRewardChoice,
@@ -121,6 +122,10 @@ function mapCommerceError(
   requestId: string,
   dependencies: AuthenticatedHandlerDependencies,
 ) {
+  if (error instanceof CommerceVerificationUnavailableError) {
+    logCommerceFailure(dependencies, route, requestId, 503, "provider_unavailable");
+    return loggedProblem(dependencies.logger, route, requestId, 503, "Service unavailable", "/problems/service-unavailable");
+  }
   if (error instanceof SyntaxError || error instanceof CommerceValidationError || error instanceof CommerceProductNotFoundError) {
     logCommerceFailure(dependencies, route, requestId, 400, "request_validation");
     return loggedProblem(dependencies.logger, route, requestId, 400, "Request validation failed", "/problems/validation");
