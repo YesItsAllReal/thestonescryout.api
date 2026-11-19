@@ -538,7 +538,7 @@ paths:
       description: >-
         Verifies the Apple signature, configured App Store environment, bundle,
         and appAccountToken binding to the authenticated player UUID.
-        A single-unit Energy Refill (org.itsallreal.unearthed.energy.refill)
+        A single-unit Energy Refill (EnergyRefill100)
         atomically grants 100 energy once per environment and transaction ID,
         with a ledger entry and no entitlement. TestFlight uses Sandbox.
       security:

@@ -11,7 +11,7 @@ import {
 } from "./commerce-service.js";
 
 export const APP_STORE_BUNDLE_ID = "com.itsallrealministries.stonescryout";
-export const ENERGY_REFILL_PRODUCT_ID = "org.itsallreal.unearthed.energy.refill";
+export const ENERGY_REFILL_PRODUCT_ID = "EnergyRefill100";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TRANSACTION_ID = /^[1-9][0-9]{0,31}$/;
 const CLOCK_SKEW_MS = 300_000;

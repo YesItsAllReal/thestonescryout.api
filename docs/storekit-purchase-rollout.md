@@ -8,7 +8,7 @@ StoreKit transaction after the API confirms durable processing.
 | App Store Connect field | Value |
 | --- | --- |
 | Display name | Energy Refill |
-| Product ID | `org.itsallreal.unearthed.energy.refill` |
+| Product ID | `EnergyRefill100` |
 | Product type | Consumable |
 | US price | $0.99, managed in App Store Connect |
 | Bundle ID | `com.itsallrealministries.stonescryout` |
